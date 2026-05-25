@@ -451,35 +451,35 @@ def render_page(title, body_tpl, **ctx):
       <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-    --bg: #0b1121; /* Sangat gelap, modern */
-    --bg-light: #151e32;
-    --card: rgba(30, 41, 59, 0.4);
-    --card-hover: rgba(30, 41, 59, 0.7);
-    --border: rgba(255, 255, 255, 0.08);
-    --primary: #10b981;
-    --primary-glow: rgba(16, 185, 129, 0.3);
-    --text: #f8fafc;
-    --text-muted: #94a3b8;
-    --shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-    --radius: 24px;
+    --bg: #f8fafc;
+    --bg-light: #ffffff;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --primary: #0ea5e9;
+    --primary-hover: #0284c7;
+    --success: #10b981;
+    --danger: #ef4444;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    --radius: 20px;
 }
 
 * { box-sizing: border-box; }
 
 body {
     margin: 0; 
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background-color: var(--bg);
-    background-image: 
-        radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.04), transparent 25%),
-        radial-gradient(circle at 85% 30%, rgba(14, 165, 233, 0.04), transparent 25%);
-    background-attachment: fixed;
     color: var(--text);
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
 }
 
 /* ==== LAYOUT UTAMA ==== */
@@ -497,16 +497,13 @@ body {
 
 /* ==== SIDEBAR MODERN ==== */
 .sidebar {
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--bg-light);
     border-right: 1px solid var(--border);
     padding: 2rem 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
     z-index: 50;
-    transition: all 0.3s ease;
 }
 
 @media (min-width: 900px) {
@@ -520,7 +517,7 @@ body {
 .brand {
     font-size: 1.5rem;
     font-weight: 800;
-    color: #fff;
+    color: var(--text);
     display: flex;
     align-items: center;
     gap: 12px;
@@ -528,9 +525,7 @@ body {
     letter-spacing: -0.5px;
 }
 .brand span {
-    background: linear-gradient(135deg, #34d399, #38bdf8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--primary);
 }
 
 .nav {
@@ -546,31 +541,28 @@ body {
     letter-spacing: 1.5px;
     margin-top: 1rem;
     margin-bottom: 0.5rem;
-    padding-left: 0.5rem;
+    padding-left: 0.75rem;
 }
 
 .nav a {
     text-decoration: none;
     color: var(--text-muted);
     padding: 12px 16px;
-    border-radius: 16px;
+    border-radius: 14px;
     font-weight: 600;
     display: flex;
     align-items: center;
     gap: 12px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid transparent;
+    transition: all 0.2s ease;
 }
 .nav a:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
-    transform: translateX(4px);
+    background: #f1f5f9;
+    color: var(--text);
 }
 .nav a.active {
-    background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(14,165,233,0.15));
+    background: var(--primary);
     color: #fff;
-    border-color: rgba(16,185,129,0.2);
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
+    box-shadow: var(--shadow);
 }
 
 /* ==== KONTEN UTAMA ==== */
@@ -592,45 +584,40 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2.5rem;
+    margin-bottom: 2rem;
     flex-wrap: wrap;
     gap: 1rem;
 }
 .header h2 {
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: 800;
     margin: 0;
     letter-spacing: -0.5px;
-    background: linear-gradient(to right, #fff, #cbd5e1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text);
 }
 
-/* ==== CARDS (GLASSMORPHISM) ==== */
+/* ==== CARDS ==== */
 .card {
     background: var(--card);
     border-radius: var(--radius);
     border: 1px solid var(--border);
     padding: 24px;
     margin-bottom: 24px;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
-    transition: transform 0.3s ease, border-color 0.3s ease;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.3s ease;
 }
 .card:hover {
-    border-color: rgba(255,255,255,0.15);
+    box-shadow: var(--shadow);
 }
-
 .card h3 {
     margin-top: 0;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     margin-bottom: 1.25rem;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 /* ==== TOMBOL ==== */
@@ -638,33 +625,32 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 12px 24px;
-    border-radius: 14px;
-    font-weight: 700;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-weight: 600;
     text-decoration: none;
     border: none;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     font-family: inherit;
     font-size: 14px;
     gap: 8px;
 }
 .btn-primary {
-    background: linear-gradient(135deg, #10b981, #0ea5e9);
+    background: var(--primary);
     color: #fff;
-    box-shadow: 0 4px 15px var(--primary-glow);
+    box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px var(--primary-glow);
-    filter: brightness(1.1);
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
 }
 .btn-danger {
-    background: rgba(239, 68, 68, 0.1);
+    background: #fee2e2;
     color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.2);
 }
-.btn-danger:hover { background: #ef4444; color: #fff; }
+.btn-danger:hover { background: #fecaca; }
 
 /* ==== TABEL MODERN ==== */
 table {
@@ -673,24 +659,24 @@ table {
     border-spacing: 0;
 }
 th {
-    background: rgba(15, 23, 42, 0.4);
+    background: #f8fafc;
     color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     font-size: 0.75rem;
     padding: 16px;
     text-align: left;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 2px solid var(--border);
 }
 td {
     padding: 16px;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-    color: #e2e8f0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
     vertical-align: middle;
 }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(255,255,255,0.02); }
+tr:hover td { background: #f8fafc; }
 
 /* ==== FORM & INPUTS ==== */
 .input, select, textarea {
@@ -698,17 +684,17 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     padding: 14px 16px;
     border-radius: 12px;
     border: 1px solid var(--border);
-    background: rgba(15, 23, 42, 0.5);
-    color: #fff;
+    background: #f8fafc;
+    color: var(--text);
     font-family: inherit;
     font-size: 14px;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
 }
 .input:focus, select:focus, textarea:focus {
     outline: none;
     border-color: var(--primary);
-    background: rgba(15, 23, 42, 0.8);
-    box-shadow: 0 0 0 3px rgba(16,185,129,0.1);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
 }
 label {
     display: block;
@@ -724,16 +710,16 @@ label {
     border-radius: 100px;
     font-size: 0.75rem;
     font-weight: 700;
-    background: rgba(255,255,255,0.1);
-    color: #fff;
+    background: #f1f5f9;
+    color: var(--text-muted);
     border: 1px solid var(--border);
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
-.badge-blue { background: rgba(56,189,248,0.1); color: #38bdf8; border-color: rgba(56,189,248,0.2); }
-.badge-green { background: rgba(52,211,153,0.1); color: #34d399; border-color: rgba(52,211,153,0.2); }
-.badge-red { background: rgba(248,113,113,0.1); color: #f87171; border-color: rgba(248,113,113,0.2); }
+.badge-blue { background: #e0f2fe; color: #0284c7; border-color: #bae6fd; }
+.badge-green { background: #d1fae5; color: #059669; border-color: #a7f3d0; }
+.badge-red { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
 
 /* ==== GRIDS ==== */
 .grid { display: grid; gap: 1.5rem; }
@@ -741,24 +727,24 @@ label {
 .g3 { grid-template-columns: repeat(3, 1fr); }
 .g4 { grid-template-columns: repeat(4, 1fr); }
 
-/* ==== DASHBOARD STATS (HERO) ==== */
+/* ==== HERO / DASHBOARD STATS ==== */
 .hero-stat {
-    position: relative;
-    overflow: hidden;
-    padding: 32px;
-    border-radius: 28px;
+    padding: 24px;
+    border-radius: var(--radius);
+    background: #fff;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 .hero-stat .stat-value {
-    font-size: 3rem;
+    font-size: 2.5rem;
     font-weight: 800;
-    background: linear-gradient(135deg, #fff, #94a3b8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
+    color: var(--text);
+    margin-bottom: 4px;
 }
 
-/* ==== MOBILE RESPONSIVE OPTIMIZATIONS (IPHONE 16 PRO dkk) ==== */
+/* ==== KHUSUS TAMPILAN SMARTPHONE (IPHONE 16 PRO DKK) ==== */
 @media (max-width: 900px) {
+    /* Merombak Sidebar menjadi Bottom Navigation Bar (iOS Style) */
     .sidebar {
         position: fixed;
         bottom: 0; left: 0; right: 0;
@@ -766,42 +752,75 @@ label {
         height: auto;
         flex-direction: row;
         padding: 12px 16px;
-        background: rgba(15, 23, 42, 0.85);
-        border-top: 1px solid rgba(255,255,255,0.1);
+        padding-bottom: env(safe-area-inset-bottom, 20px); /* Untuk iPhone Home Bar */
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-top: 1px solid var(--border);
         border-right: none;
         justify-content: space-around;
-        border-radius: 24px 24px 0 0;
-        box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+        z-index: 999;
     }
+    
+    /* Sembunyikan elemen sidebar yang tidak perlu di mobile */
     .brand, .nav-title, .sidebar-foot { display: none !important; }
+    
     .nav {
         flex-direction: row;
-        gap: 0.25rem;
+        gap: 0;
         width: 100%;
         justify-content: space-between;
     }
+    
     .nav a {
         flex-direction: column;
-        padding: 8px;
+        padding: 8px 4px;
         font-size: 0.65rem;
-        gap: 4px;
+        gap: 6px;
         border-radius: 12px;
         flex: 1;
         text-align: center;
+        background: transparent !important;
+        color: var(--text-muted);
+        box-shadow: none !important;
     }
-    .content {
-        padding: 1.25rem;
-        padding-bottom: 120px !important;
-    }
-    .header h2 { font-size: 1.5rem; }
-    .g2, .g3, .g4 { grid-template-columns: 1fr !important; }
     
-    .card {
-        padding: 1.25rem !important;
-        border-radius: 20px !important;
+    .nav a.active {
+        color: var(--primary) !important;
+        font-weight: 700;
+    }
+    
+    /* Tanda titik biru untuk menu aktif di mobile */
+    .nav a.active::after {
+        content: '';
+        display: block;
+        width: 4px;
+        height: 4px;
+        background: var(--primary);
+        border-radius: 50%;
+        margin: 0 auto;
     }
 
-    /* Tabel Anti Berantakan di HP */
+    /* Penyesuaian Ruang Konten */
+    .content {
+        padding: 1rem;
+        padding-bottom: 120px !important; /* Ruang agar tidak tertutup bottom nav */
+    }
+    
+    .header h2 { font-size: 1.5rem; }
+    
+    /* Grid 1 Kolom untuk Mobile */
+    .g2, .g3, .g4, .grid { grid-template-columns: 1fr !important; gap: 1rem !important; }
+    
+    /* Penyesuaian Kartu */
+    .card {
+        padding: 1.25rem !important;
+        border-radius: 16px !important;
+        margin-bottom: 1rem !important;
+    }
+
+    /* Tabel yang Responsif */
     table {
         display: block !important;
         width: 100% !important;
@@ -810,11 +829,13 @@ label {
         white-space: nowrap !important;
     }
     
+    /* Tombol & Toolbar memanjang penuh */
     .btn { width: 100%; justify-content: center; }
-    .toolbar { flex-direction: column; width: 100%; gap: 10px; }
+    .toolbar { flex-direction: column; width: 100%; gap: 10px; align-items: stretch !important; }
+    .toolbar .btn, .toolbar input, .toolbar select { width: 100% !important; }
 }
 
-/* Tampilan badge risiko */
+/* Badge Risiko Kehamilan */
 .risk-badge {
     padding: 8px 14px;
     border-radius: 999px;
