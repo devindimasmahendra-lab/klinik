@@ -453,6 +453,17 @@ def render_page(title, body_tpl, **ctx):
       <style>
         
 /* ===== PREMIUM MOBILE UI REDESIGN ===== */
+/* Container khusus agar tabel bisa digeser di smartphone */
+.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 1rem; }
+.risk-badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
+@keyframes pulseRisk { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+.risk-merah { animation: pulseRisk 2s infinite; }
+@media(max-width: 900px) {
+    .btn { width: 100%; text-align: center; justify-content: center; }
+    .form2, .form3 { grid-template-columns: 1fr !important; gap: 1rem; }
+    .card { padding: 1rem !important; }
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 body{
@@ -913,27 +924,7 @@ body{
             .layout { display: block; }
             .card { box-shadow: none; border: 1px solid #ddd; background: #fff; }
         }
-      
-/* ===== PATCH RESPONSIVE TAMBAHAN ===== */
-@media (max-width: 600px) {
-    table { display: block !important; width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; white-space: nowrap !important; }
-    .content { padding: 0.75rem !important; padding-bottom: 120px !important; }
-    .card { padding: 1rem !important; margin-bottom: 1rem !important; }
-    .g2, .g3, .g4, .grid { grid-template-columns: 1fr !important; gap: 0.75rem !important; }
-    .toolbar { flex-direction: column !important; align-items: stretch !important; gap: 0.5rem !important; }
-    .toolbar .btn, .toolbar select, .toolbar input { width: 100% !important; max-width: none !important; }
-    .flex, [style*="display:flex"], [style*="display: flex"] { flex-wrap: wrap !important; }
-    .sidebar { height: 70px !important; padding: 0.5rem !important; justify-content: space-around !important; flex-direction: row !important; bottom: 0 !important; top: auto !important; width: 100% !important; position: fixed !important; z-index: 1000 !important; }
-    .nav { flex-direction: row !important; width: 100% !important; justify-content: space-around !important; }
-    .nav a { flex-direction: column !important; font-size: 0.65rem !important; padding: 5px !important; }
-    .nav-title, .sidebar-foot, .brand { display: none !important; }
-}
-
-.risk-badge { padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; }
-@keyframes pulseRisk { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-.risk-merah { animation: pulseRisk 2s infinite; }
-
-</style>
+      </style>
     </head>
     <body class="font-sans antialiased">
       <script>
@@ -958,8 +949,6 @@ body{
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}">📚 Rekam Medis (History)</a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='patient_new' else '' }}">➕ Input Pasien</a>{% endif %}
             <div class="nav-title">Operasional</div>
-            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('panduan_admin') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_admin' else '' }}">👩‍💻 SOP Admin</a>{% endif %}
-            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_dokter' else '' }}">👨‍⚕️ SOP Dokter</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('soap_templates_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='soap_templates_page' else '' }}">🧩 Template SOAP</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='sop_page' else '' }}">📋 SOP Klinik</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('uploads_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='uploads_page' else '' }}">📁 Hasil USG</a>{% endif %}
@@ -1024,6 +1013,7 @@ def appointments():
         <a class="btn btn-primary" href="{{ url_for('add_appointment') }}">+ Tambah Appointment</a>
       </div>
 
+      <div style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -1216,59 +1206,37 @@ def login():
             return redirect(request.args.get('next') or url_for('dashboard'))
         log_action('LOGIN_FAILED', 'Gagal login: ' + username)
         flash('Username atau password salah.', 'danger')
-
     body = '''
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg-light),var(--bg));padding:20px;position:relative;overflow:hidden">
-      <!-- Decorative background elements -->
-      <div style="position:absolute;top:-10%;left:-10%;width:40vw;height:40vw;background:radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%);border-radius:50%"></div>
-      <div style="position:absolute;bottom:-10%;right:-10%;width:40vw;height:40vw;background:radial-gradient(circle, rgba(14,165,233,0.05) 0%, transparent 70%);border-radius:50%"></div>
-      
-      <div style="width:100%;max-width:400px;animation:fade .6s ease;z-index:10">
-        <div style="text-align:center;margin-bottom:2rem">
-          <div style="width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:36px;font-weight:900;margin:0 auto 20px;box-shadow:0 12px 30px rgba(14,165,233,.3);letter-spacing:-1px">USG</div>
-          <h1 style="margin:0;font-size:26px;color:var(--text);font-weight:800;letter-spacing:-0.5px">Klinik Arissa</h1>
-          <p style="color:var(--text-muted);margin:8px 0 0;font-size:14px;font-weight:500">Sistem Informasi Medis Terpadu</p>
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0b1120,#162033);padding:20px">
+      <div style="width:100%;max-width:440px;animation:fade .5s ease">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="width:72px;height:72px;border-radius:24px;background:linear-gradient(135deg,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;font-weight:900;margin:0 auto 16px;box-shadow:0 8px 32px rgba(34,197,94,.3)">USG</div>
+          <h1 style="margin:0;font-size:24px;color:#e5e7eb">{{ app_name }}</h1>
+          <p style="color:#94a3b8;margin:8px 0 0;font-size:14px">Sistem Informasi Klinik USG 4D — Masuk ke akun Anda</p>
         </div>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <div style="margin-bottom:20px">
-          {% for cat,msg in messages %}
-          <div style="padding:14px 18px;border-radius:16px;border:1px solid {% if cat=='success' %}rgba(34,197,94,.4){% elif cat=='danger' %}rgba(239,68,68,.4){% else %}rgba(245,158,11,.4){% endif %};background:var(--card);color:var(--text);font-size:14px;font-weight:500;box-shadow:var(--shadow);display:flex;align-items:center;gap:10px">
-            <span style="font-size:18px">{% if cat=='danger' %}⚠️{% elif cat=='success' %}✅{% else %}ℹ️{% endif %}</span> {{ msg }}
+        {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div style="margin-bottom:16px">{% for cat,msg in messages %}<div style="padding:12px 16px;border-radius:14px;border:1px solid {% if cat=='success' %}rgba(34,197,94,.4){% elif cat=='danger' %}rgba(239,68,68,.4){% else %}rgba(245,158,11,.4){% endif %};background:rgba(255,255,255,.06);color:#e5e7eb;font-size:14px;margin-bottom:8px">{{ msg }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+        <form method="post" style="background:rgba(255,255,255,.08);border:1px solid rgba(148,163,184,.18);border-radius:24px;padding:28px;backdrop-filter:blur(16px);box-shadow:0 12px 30px rgba(2,6,23,.22)">
+          <div style="margin-bottom:18px">
+            <label style="display:block;font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:8px">Username</label>
+            <input class="input" name="username" required placeholder="Masukkan username" style="width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.05);color:#e5e7eb;outline:none;font-size:15px">
           </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% endwith %}
-        
-        <form method="post" style="background:var(--card);border:1px solid var(--border);border-radius:28px;padding:32px;backdrop-filter:blur(20px);box-shadow:0 24px 60px rgba(0,0,0,.2)">
-          <div style="margin-bottom:20px">
-            <label style="display:block;font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Username</label>
-            <div style="position:relative">
-              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text-muted)">👤</span>
-              <input class="input" name="username" required placeholder="Masukkan username" style="width:100%;padding:16px 16px 16px 48px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);outline:none;font-size:15px;transition:all 0.3s ease" onfocus="this.style.borderColor='#22c55e';this.style.background='rgba(255,255,255,.06)'" onblur="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,.03)'">
-            </div>
+          <div style="margin-bottom:24px">
+            <label style="display:block;font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:8px">Password</label>
+            <input class="input" type="password" name="password" required placeholder="••••••••" style="width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.05);color:#e5e7eb;outline:none;font-size:15px">
           </div>
-          
-          <div style="margin-bottom:30px">
-            <label style="display:block;font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Password</label>
-            <div style="position:relative">
-              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text-muted)">🔒</span>
-              <input class="input" type="password" name="password" required placeholder="••••••••" style="width:100%;padding:16px 16px 16px 48px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);outline:none;font-size:15px;transition:all 0.3s ease" onfocus="this.style.borderColor='#0ea5e9';this.style.background='rgba(255,255,255,.06)'" onblur="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,.03)'">
-            </div>
-          </div>
-          
-          <button class="btn btn-primary" style="width:100%;padding:16px;border-radius:16px;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#fff;font-weight:800;font-size:16px;border:none;cursor:pointer;box-shadow:0 12px 30px rgba(14,165,233,.25);transition:all 0.3s ease" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 15px 35px rgba(14,165,233,.35)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 12px 30px rgba(14,165,233,.25)'">Masuk ke Sistem ➡️</button>
+          <button class="btn btn-primary" style="width:100%;padding:14px;border-radius:16px;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#fff;font-weight:700;font-size:16px;border:none;cursor:pointer">🔐 Masuk ke Dashboard</button>
         </form>
-        
-        <div style="text-align:center;margin-top:30px;color:var(--text-muted);font-size:13px;font-weight:500">
-          &copy; 2026 Klinik Arissa USG 4D
+        <div style="margin-top:20px;background:rgba(255,255,255,.06);border:1px solid rgba(148,163,184,.18);border-radius:20px;padding:20px;backdrop-filter:blur(8px)">
+          <div style="font-weight:700;color:#e5e7eb;margin-bottom:10px;font-size:14px">👤 Akun Default</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>superadmin</span><span style="color:#22c55e;font-family:monospace">admin123</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>admin</span><span style="color:#22c55e;font-family:monospace">admin123</span></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>dokter</span><span style="color:#22c55e;font-family:monospace">dokter123</span></div>
+          </div>
         </div>
       </div>
     </div>
     '''
-
     return render_page('Login', body, app_name=APP_NAME)
 
 
@@ -1654,7 +1622,8 @@ def patient_detail(patient_id):
     <div class="card" style="margin-top:16px">
       <h3 class="flex items-center gap-2"><span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span> Ringkasan Perkembangan Janin</h3>
       <div class="small muted mb-3">Data historis dari kunjungan sebelumnya untuk memantau tren pertumbuhan.</div>
-      <table class="w-full text-sm">
+      <div style="overflow-x:auto">
+        <table class="w-full text-sm">
           <thead class="bg-slate-800/50">
             <tr><th class="p-3">Tanggal</th><th class="p-3">Usia Hamil</th><th class="p-3">DJJ (bpm)</th><th class="p-3">Posisi</th><th class="p-3">Berat (gr)</th></tr>
           </thead>
@@ -1709,7 +1678,8 @@ def patient_history(patient_id):
             <span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span>
             Monitoring Perkembangan Janin (USG)
         </h3>
-        <table class="w-full text-sm border-collapse">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
                 <thead>
                     <tr class="text-slate-500 bg-slate-800/50 uppercase text-[10px] tracking-widest border-b border-slate-700">
                         <th class="py-3 px-4 text-left">Tgl Periksa</th>
@@ -1911,92 +1881,6 @@ def soap_templates_page():
     return render_page('Template SOAP Cepat', body, rows=rows)
 
 
-
-
-@app.route('/panduan/admin')
-@role_required('superadmin', 'admin')
-def panduan_admin():
-    body = '''
-    <div class="hero card mb-6">
-        <div>
-            <h3 class="text-2xl font-bold text-white mb-2">👩‍💻 SOP Panduan Admin</h3>
-            <div class="text-slate-400">Prosedur operasional sistem khusus untuk Admin/Resepsionis.</div>
-        </div>
-    </div>
-    
-    <div class="g2 grid mb-6">
-        <div class="card">
-            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">1. Registrasi & Pendaftaran</h4>
-            <div class="space-y-4 text-sm text-slate-300">
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Pasien Baru:</strong> Masuk ke menu <b>"Input Pasien"</b>. Isi kelengkapan data diri dan atur status ke <b>"menunggu"</b>.
-                </div>
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Pasien Lama:</strong> Di menu Input Pasien, cari nama atau RM di kotak pencarian teratas. Jika ketemu, klik untuk auto-fill, dan daftarkan kembali ke antrian hari ini.
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">2. Manajemen Kasir (Billing)</h4>
-            <div class="space-y-4 text-sm text-slate-300">
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Input Tagihan:</strong> Setelah diperiksa dokter, gulir ke kotak "Billing" pada detail pasien. Masukkan nama layanan dan nominal harga.
-                </div>
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Pelunasan:</strong> Setelah dibayar, tekan <b>"LUNAS"</b>. Jangan lupa ubah status antrian pasien tersebut menjadi <b>"selesai"</b> agar hilang dari antrian aktif dokter.
-                </div>
-            </div>
-        </div>
-    </div>
-    '''
-    return render_page('SOP Admin', body)
-
-
-@app.route('/panduan/dokter')
-@role_required('superadmin', 'dokter')
-def panduan_dokter():
-    body = '''
-    <div class="hero card mb-6">
-        <div>
-            <h3 class="text-2xl font-bold text-white mb-2">👨‍⚕️ SOP Panduan Dokter</h3>
-            <div class="text-slate-400">Panduan standar pelayanan medis dan penggunaan fitur USG 4D.</div>
-        </div>
-    </div>
-    
-    <div class="g2 grid mb-6">
-        <div class="card">
-            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">1. Pemeriksaan SOAP & Deteksi Dini</h4>
-            <div class="space-y-3 text-sm text-slate-300">
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Memanggil Pasien:</strong> Buka menu <b>"Antrian Hari Ini"</b>. Klik "Periksa" untuk masuk ke halaman detail medis pasien.
-                </div>
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Pengisian SOAP:</strong> Isi keluhan dan diagnosis. Anda dapat menggunakan <i>Template SOAP Cepat</i> untuk auto-fill standar SOP.
-                </div>
-                <div class="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30">
-                    <strong class="text-amber-400">Wajib Diisi (Algoritma Risiko):</strong> Kolom <b>TD Sistolik/Diastolik</b> dan <b>DJJ</b> harus diisi angka. Sistem akan memunculkan <i>Badge Merah/Kuning/Hijau</i> otomatis mendeteksi bahaya (seperti Preeklampsia).
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">2. Upload Hasil & Kurva Janin</h4>
-            <div class="space-y-3 text-sm text-slate-300">
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Upload Digital:</strong> Pilih file foto/video USG. Klik <b>"Copy Link"</b> dan kirim via WhatsApp ke pasien agar mereka dapat mendownload mandiri.
-                </div>
-                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <strong class="text-white">Membaca Kurva:</strong> Grafik di bagian atas detail pasien (EBJ & DJJ) membaca riwayat pemeriksaan sebelumnya untuk memantau tren pertumbuhan janin.
-                </div>
-            </div>
-        </div>
-    </div>
-    '''
-    return render_page('SOP Dokter', body)
-
-
-
 @app.route('/sop')
 @role_required('superadmin', 'admin', 'dokter')
 def sop_page():
@@ -2170,7 +2054,7 @@ if __name__ == '__main__':
     print('Buka di browser: http://127.0.0.1:{}'.format(port))
     print('=' * 66)
     try:
-        app.run(debug=False, use_reloader=True, host='0.0.0.0', port=port)
+        app.run(debug=True, use_reloader=True, host='0.0.0.0', port=port)
     except OSError as exc:
         print('\nGAGAL menjalankan server di port {}.'.format(port))
         print('Detail error: {}'.format(exc))
