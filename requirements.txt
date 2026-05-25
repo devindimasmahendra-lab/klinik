@@ -1,11 +1,5 @@
 flask
-flask-socketio
 gunicorn
-gevent
+werkzeug
+qrcode
 pillow
-requests
-yfinance
-pandas
-numpy
-requests
-curl_cffi
