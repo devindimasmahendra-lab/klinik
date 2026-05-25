@@ -453,116 +453,6 @@ def render_page(title, body_tpl, **ctx):
       <style>
         
 /* ===== PREMIUM MOBILE UI REDESIGN ===== */
-
-/* Make all tables scrollable directly on mobile */
-
-/* Make all tables scrollable directly on mobile */
-@media (max-width: 600px) {
-    table {
-        display: block !important;
-        width: 100% !important;
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch !important;
-        white-space: nowrap !important;
-    }
-}
-
-/* === TAMBAHAN FIX MOBILE IPHONE 16 PRO === */
-@media (max-width: 600px) {
-    .content {
-        padding: 0.75rem !important;
-        padding-bottom: 120px !important; /* Spasi untuk bottom navbar */
-    }
-    
-    .card {
-        padding: 1rem !important;
-        border-radius: 20px !important;
-        margin-bottom: 1rem !important;
-    }
-    
-    /* G2, G3, G4 paksa 1 kolom di HP */
-    .g2, .g3, .g4, .grid {
-        grid-template-columns: 1fr !important;
-        gap: 0.75rem !important;
-    }
-    
-    /* Toolbar agar elemen tidak memanjang keluar layar */
-    .toolbar {
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 0.5rem !important;
-    }
-    
-    .toolbar .btn, .toolbar select, .toolbar input {
-        width: 100% !important;
-        max-width: none !important;
-    }
-    
-    /* Atur elemen flex yang ada di judul card agar turun ke baris baru kalau sempit */
-    .flex, [style*="display:flex"], [style*="display: flex"] {
-        flex-wrap: wrap !important;
-    }
-    
-    /* Sembunyikan badge atau elemen kurang penting jika perlu, tapi kita buat wrap saja */
-    h2, h3, h4 {
-        font-size: 1.2rem !important;
-        line-height: 1.4 !important;
-    }
-    
-    /* Ukuran text dasar sedikit dikecilkan agar muat */
-    body {
-        font-size: 14px !important;
-    }
-    
-    /* Table responsive */
-    .table-responsive {
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.05);
-        margin-bottom: 1rem;
-    }
-    
-    table th, table td {
-        white-space: nowrap; /* Jangan biarkan teks tabel numpuk ke bawah kalau kolomnya banyak */
-        padding: 10px !important;
-        font-size: 13px !important;
-    }
-    
-    /* Bottom Navigation Bar fix */
-    .sidebar {
-        height: 70px !important;
-        padding: 0.5rem !important;
-        justify-content: space-between !important;
-    }
-    
-    .nav {
-        gap: 0 !important;
-    }
-    
-    .nav a {
-        padding: 0.4rem !important;
-        min-width: 50px !important;
-        font-size: 0.65rem !important;
-    }
-    
-    .nav-title, .sidebar-foot, .brand {
-        display: none !important;
-    }
-}
-
-/* Container khusus agar tabel bisa digeser di smartphone */
-.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 1rem; }
-.risk-badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
-@keyframes pulseRisk { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-.risk-merah { animation: pulseRisk 2s infinite; }
-@media(max-width: 900px) {
-    .btn { width: 100%; text-align: center; justify-content: center; }
-    .form2, .form3 { grid-template-columns: 1fr !important; gap: 1rem; }
-    .card { padding: 1rem !important; }
-}
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 body{
@@ -1023,7 +913,27 @@ body{
             .layout { display: block; }
             .card { box-shadow: none; border: 1px solid #ddd; background: #fff; }
         }
-      </style>
+      
+/* ===== PATCH RESPONSIVE TAMBAHAN ===== */
+@media (max-width: 600px) {
+    table { display: block !important; width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; white-space: nowrap !important; }
+    .content { padding: 0.75rem !important; padding-bottom: 120px !important; }
+    .card { padding: 1rem !important; margin-bottom: 1rem !important; }
+    .g2, .g3, .g4, .grid { grid-template-columns: 1fr !important; gap: 0.75rem !important; }
+    .toolbar { flex-direction: column !important; align-items: stretch !important; gap: 0.5rem !important; }
+    .toolbar .btn, .toolbar select, .toolbar input { width: 100% !important; max-width: none !important; }
+    .flex, [style*="display:flex"], [style*="display: flex"] { flex-wrap: wrap !important; }
+    .sidebar { height: 70px !important; padding: 0.5rem !important; justify-content: space-around !important; flex-direction: row !important; bottom: 0 !important; top: auto !important; width: 100% !important; position: fixed !important; z-index: 1000 !important; }
+    .nav { flex-direction: row !important; width: 100% !important; justify-content: space-around !important; }
+    .nav a { flex-direction: column !important; font-size: 0.65rem !important; padding: 5px !important; }
+    .nav-title, .sidebar-foot, .brand { display: none !important; }
+}
+
+.risk-badge { padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; }
+@keyframes pulseRisk { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+.risk-merah { animation: pulseRisk 2s infinite; }
+
+</style>
     </head>
     <body class="font-sans antialiased">
       <script>
@@ -1048,7 +958,8 @@ body{
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}">📚 Rekam Medis (History)</a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='patient_new' else '' }}">➕ Input Pasien</a>{% endif %}
             <div class="nav-title">Operasional</div>
-            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('panduan_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_page' else '' }}">📖 Panduan Sistem</a>{% endif %}
+            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('panduan_admin') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_admin' else '' }}">👩‍💻 SOP Admin</a>{% endif %}
+            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_dokter' else '' }}">👨‍⚕️ SOP Dokter</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('soap_templates_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='soap_templates_page' else '' }}">🧩 Template SOAP</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='sop_page' else '' }}">📋 SOP Klinik</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('uploads_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='uploads_page' else '' }}">📁 Hasil USG</a>{% endif %}
@@ -2001,75 +1912,89 @@ def soap_templates_page():
 
 
 
-@app.route('/panduan')
-@role_required('superadmin', 'admin', 'dokter')
-def panduan_page():
+
+@app.route('/panduan/admin')
+@role_required('superadmin', 'admin')
+def panduan_admin():
     body = '''
     <div class="hero card mb-6">
         <div>
-            <h3 class="text-2xl font-bold text-white mb-2">📚 Panduan Penggunaan Sistem</h3>
-            <div class="text-slate-400">Dokumentasi operasional Klinik Arissa USG 4D untuk Dokter dan Admin.</div>
+            <h3 class="text-2xl font-bold text-white mb-2">👩‍💻 SOP Panduan Admin</h3>
+            <div class="text-slate-400">Prosedur operasional sistem khusus untuk Admin/Resepsionis.</div>
         </div>
     </div>
     
     <div class="g2 grid mb-6">
         <div class="card">
-            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">👨‍⚕️ Panduan Untuk Dokter</h4>
+            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">1. Registrasi & Pendaftaran</h4>
             <div class="space-y-4 text-sm text-slate-300">
-                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <h5 class="font-bold text-white mb-2">1. Manajemen Antrian</h5>
-                    <p>Buka menu <strong>"Antrian Hari Ini"</strong>. Anda akan melihat daftar pasien yang sedang menunggu. Klik tombol <strong>"Periksa"</strong> untuk masuk ke rekam medis pasien tersebut.</p>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pasien Baru:</strong> Masuk ke menu <b>"Input Pasien"</b>. Isi kelengkapan data diri dan atur status ke <b>"menunggu"</b>.
                 </div>
-                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <h5 class="font-bold text-white mb-2">2. Pengisian SOAP & Data USG</h5>
-                    <p>Di halaman detail pasien, gulir ke bagian <strong>"SOAP Pemeriksaan"</strong>. Anda dapat menggunakan <em>Template SOAP Cepat</em> untuk mengisi kerangka dasar secara otomatis. Pastikan untuk mengisi parameter janin (Usia, DJJ, Posisi, EBJ) karena sistem akan <strong class="text-amber-400">otomatis menghitung skor risiko kehamilan</strong> berdasarkan TD dan DJJ.</p>
-                </div>
-                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <h5 class="font-bold text-white mb-2">3. Upload Hasil USG & Berbagi Link</h5>
-                    <p>Gunakan kolom <strong>"Upload Hasil USG"</strong> untuk mengunggah foto/video (maks. 32MB). Anda tidak perlu mencetak fisik, cukup klik <strong>"Copy Link"</strong> atau tunjukkan QR Code pada pasien agar mereka dapat mengunduh hasilnya sendiri di HP mereka.</p>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pasien Lama:</strong> Di menu Input Pasien, cari nama atau RM di kotak pencarian teratas. Jika ketemu, klik untuk auto-fill, dan daftarkan kembali ke antrian hari ini.
                 </div>
             </div>
         </div>
         
         <div class="card">
-            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">👩‍💻 Panduan Untuk Admin</h4>
+            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">2. Manajemen Kasir (Billing)</h4>
             <div class="space-y-4 text-sm text-slate-300">
-                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <h5 class="font-bold text-white mb-2">1. Registrasi Pasien Baru</h5>
-                    <p>Gunakan menu <strong>"Input Pasien"</strong>. Jika pasien sudah pernah mendaftar, ketik nama atau No RM pada kolom pencarian di bagian atas, lalu klik pasien tersebut untuk dimasukkan kembali ke antrian hari ini (tanpa perlu input ulang).</p>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Input Tagihan:</strong> Setelah diperiksa dokter, gulir ke kotak "Billing" pada detail pasien. Masukkan nama layanan dan nominal harga.
                 </div>
-                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <h5 class="font-bold text-white mb-2">2. Pengaturan Status & Kasir (Billing)</h5>
-                    <p>Setelah pasien selesai diperiksa dokter, gulir ke bawah pada detail pasien untuk menambahkan rincian biaya (Billing). Setelah pembayaran selesai, klik tombol <strong>"LUNAS"</strong> dan ubah status antrian pasien menjadi <strong>"selesai"</strong>.</p>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pelunasan:</strong> Setelah dibayar, tekan <b>"LUNAS"</b>. Jangan lupa ubah status antrian pasien tersebut menjadi <b>"selesai"</b> agar hilang dari antrian aktif dokter.
                 </div>
-                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                    <h5 class="font-bold text-white mb-2">3. Manajemen Pengguna & Keamanan</h5>
-                    <p>Superadmin dapat menambah akun dokter atau admin baru di menu <strong>"User"</strong>. Pastikan rutin mengunduh cadangan database melalui menu <strong>"Settings / Backup"</strong> di panel kiri bawah setidaknya seminggu sekali.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="card">
-        <h4 class="text-white font-bold mb-3">Sistem Peringatan Risiko Kehamilan Otomatis</h4>
-        <div class="text-sm text-slate-300 mb-4">Sistem akan membaca angka Tekanan Darah dan Detak Jantung Janin (DJJ) pada form SOAP.</div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <div class="font-bold text-red-400 mb-1">🔴 Risiko Tinggi (Merah)</div>
-                <div class="text-xs text-slate-400">Tekanan Darah >= 160/110 atau DJJ di luar 100-170 bpm. Indikasi gawat janin/preeklampsia.</div>
-            </div>
-            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <div class="font-bold text-amber-400 mb-1">🟡 Risiko Sedang (Kuning)</div>
-                <div class="text-xs text-slate-400">Tekanan Darah >= 140/90 atau DJJ di batas 110-160 bpm. Butuh pantauan lanjut.</div>
-            </div>
-            <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                <div class="font-bold text-emerald-400 mb-1">🟢 Normal (Hijau)</div>
-                <div class="text-xs text-slate-400">Tekanan Darah dan DJJ berada dalam ambang batas aman.</div>
             </div>
         </div>
     </div>
     '''
-    return render_page('Panduan Penggunaan', body)
+    return render_page('SOP Admin', body)
+
+
+@app.route('/panduan/dokter')
+@role_required('superadmin', 'dokter')
+def panduan_dokter():
+    body = '''
+    <div class="hero card mb-6">
+        <div>
+            <h3 class="text-2xl font-bold text-white mb-2">👨‍⚕️ SOP Panduan Dokter</h3>
+            <div class="text-slate-400">Panduan standar pelayanan medis dan penggunaan fitur USG 4D.</div>
+        </div>
+    </div>
+    
+    <div class="g2 grid mb-6">
+        <div class="card">
+            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">1. Pemeriksaan SOAP & Deteksi Dini</h4>
+            <div class="space-y-3 text-sm text-slate-300">
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Memanggil Pasien:</strong> Buka menu <b>"Antrian Hari Ini"</b>. Klik "Periksa" untuk masuk ke halaman detail medis pasien.
+                </div>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pengisian SOAP:</strong> Isi keluhan dan diagnosis. Anda dapat menggunakan <i>Template SOAP Cepat</i> untuk auto-fill standar SOP.
+                </div>
+                <div class="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30">
+                    <strong class="text-amber-400">Wajib Diisi (Algoritma Risiko):</strong> Kolom <b>TD Sistolik/Diastolik</b> dan <b>DJJ</b> harus diisi angka. Sistem akan memunculkan <i>Badge Merah/Kuning/Hijau</i> otomatis mendeteksi bahaya (seperti Preeklampsia).
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">2. Upload Hasil & Kurva Janin</h4>
+            <div class="space-y-3 text-sm text-slate-300">
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Upload Digital:</strong> Pilih file foto/video USG. Klik <b>"Copy Link"</b> dan kirim via WhatsApp ke pasien agar mereka dapat mendownload mandiri.
+                </div>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Membaca Kurva:</strong> Grafik di bagian atas detail pasien (EBJ & DJJ) membaca riwayat pemeriksaan sebelumnya untuk memantau tren pertumbuhan janin.
+                </div>
+            </div>
+        </div>
+    </div>
+    '''
+    return render_page('SOP Dokter', body)
+
 
 
 @app.route('/sop')
@@ -2245,7 +2170,7 @@ if __name__ == '__main__':
     print('Buka di browser: http://127.0.0.1:{}'.format(port))
     print('=' * 66)
     try:
-        app.run(debug=True, use_reloader=True, host='0.0.0.0', port=port)
+        app.run(debug=False, use_reloader=True, host='0.0.0.0', port=port)
     except OSError as exc:
         print('\nGAGAL menjalankan server di port {}.'.format(port))
         print('Detail error: {}'.format(exc))
