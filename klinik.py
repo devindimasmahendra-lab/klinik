@@ -114,7 +114,7 @@ def qr_data_uri(text):
         return None
 
 
-def 
+
 @app.route('/appointments')
 @login_required
 def appointments():
