@@ -114,7 +114,194 @@ def qr_data_uri(text):
         return None
 
 
-def init_db():
+def 
+@app.route('/appointments')
+@login_required
+def appointments():
+    conn = db()
+    rows = conn.execute("""
+        SELECT a.*, p.nama_pasien, p.nomor_rekam_medis
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        ORDER BY a.appointment_date DESC
+    """).fetchall()
+    conn.close()
+
+    body = """
+    <div class="card">
+      <div class="toolbar">
+        <h2>📅 Jadwal Appointment</h2>
+        <a class="btn btn-primary" href="{{ url_for('add_appointment') }}">+ Tambah Appointment</a>
+      </div>
+
+      <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Pasien</th>
+            <th>RM</th>
+            <th>Dokter</th>
+            <th>Tanggal</th>
+            <th>Keluhan</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r['nama_pasien'] }}</td>
+            <td>{{ r['nomor_rekam_medis'] }}</td>
+            <td>{{ r['doctor_name'] or '-' }}</td>
+            <td>{{ fmt_dt(r['appointment_date']) }}</td>
+            <td>{{ r['complaint'] or '-' }}</td>
+            <td><span class="badge">{{ r['status'] }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    """
+    return render_page('Appointments', body, rows=rows, fmt_dt=fmt_dt)
+
+
+@app.route('/appointments/add', methods=['GET', 'POST'])
+@role_required('superadmin', 'admin', 'dokter')
+def add_appointment():
+    conn = db()
+
+    if request.method == 'POST':
+        patient_id = request.form.get('patient_id')
+        doctor_name = request.form.get('doctor_name')
+        appointment_date = request.form.get('appointment_date')
+        complaint = request.form.get('complaint')
+
+        conn.execute("""
+            INSERT INTO appointments
+            (patient_id, doctor_name, appointment_date, complaint)
+            VALUES (?, ?, ?, ?)
+        """, (patient_id, doctor_name, appointment_date, complaint))
+
+        conn.commit()
+        conn.close()
+
+        flash('Appointment berhasil ditambahkan.', 'success')
+        return redirect(url_for('appointments'))
+
+    patients = conn.execute("""
+        SELECT id, nama_pasien, nomor_rekam_medis
+        FROM patients
+        ORDER BY created_at DESC
+    """).fetchall()
+    conn.close()
+
+    body = """
+    <div class="card">
+      <h2>➕ Tambah Appointment</h2>
+
+      <form method="post" class="grid">
+        <div>
+          <label>Pasien</label>
+          <select class="input" name="patient_id" required>
+            <option value="">-- Pilih Pasien --</option>
+            {% for p in patients %}
+            <option value="{{ p['id'] }}">
+              {{ p['nama_pasien'] }} - {{ p['nomor_rekam_medis'] }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label>Nama Dokter</label>
+          <input class="input" name="doctor_name" placeholder="dr. ..." required>
+        </div>
+
+        <div>
+          <label>Tanggal Appointment</label>
+          <input class="input" type="datetime-local" name="appointment_date" required>
+        </div>
+
+        <div>
+          <label>Keluhan</label>
+          <textarea class="input" name="complaint"></textarea>
+        </div>
+
+        <button class="btn btn-primary">💾 Simpan Appointment</button>
+      </form>
+    </div>
+    """
+    return render_page('Tambah Appointment', body, patients=patients)
+
+
+@app.route('/export-patients')
+@role_required('superadmin', 'admin')
+def export_patients():
+    conn = db()
+    rows = conn.execute("""
+        SELECT nama_pasien, nomor_rekam_medis, nomor_hp, alamat, created_at
+        FROM patients
+        ORDER BY created_at DESC
+    """).fetchall()
+    conn.close()
+
+    import csv
+    from io import StringIO
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(['Nama Pasien', 'No RM', 'No HP', 'Alamat', 'Tanggal Input'])
+
+    for r in rows:
+        writer.writerow([
+            r['nama_pasien'],
+            r['nomor_rekam_medis'],
+            r['nomor_hp'],
+            r['alamat'],
+            r['created_at']
+        ])
+
+    mem = io.BytesIO()
+    mem.write(output.getvalue().encode('utf-8-sig'))
+    mem.seek(0)
+
+    return send_file(
+        mem,
+        as_attachment=True,
+        download_name='data_pasien.csv',
+        mimetype='text/csv'
+    )
+
+
+@app.route('/api/dashboard-stats')
+@login_required
+def dashboard_stats_api():
+    conn = db()
+
+    total_patients = conn.execute(
+        "SELECT COUNT(*) FROM patients"
+    ).fetchone()[0]
+
+    total_soap = conn.execute(
+        "SELECT COUNT(*) FROM soap_records"
+    ).fetchone()[0]
+
+    total_appointments = conn.execute(
+        "SELECT COUNT(*) FROM appointments"
+    ).fetchone()[0]
+
+    conn.close()
+
+    return {
+        "total_patients": total_patients,
+        "total_soap": total_soap,
+        "total_appointments": total_appointments,
+        "generated_at": now()
+    }
+
+
+init_db():
     conn = db()
     cur = conn.cursor()
     cur.executescript('''
@@ -216,7 +403,20 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
         );
+        
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            doctor_name TEXT,
+            appointment_date TEXT NOT NULL,
+            complaint TEXT,
+            status TEXT NOT NULL DEFAULT 'terjadwal',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS audit_logs (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             username TEXT,
@@ -362,7 +562,251 @@ def render_page(title, body_tpl, **ctx):
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
       <script src="https://cdn.tailwindcss.com"></script>
       <style>
-        /* Base styles */
+        
+/* ===== PREMIUM MOBILE UI REDESIGN ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+body{
+    background:
+      radial-gradient(circle at top right, rgba(34,197,94,.18), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(14,165,233,.18), transparent 30%),
+      #07111f !important;
+}
+
+.layout{
+    grid-template-columns: 1fr !important;
+}
+
+.sidebar{
+    position: fixed !important;
+    bottom: 0 !important;
+    top: auto !important;
+    left: 0;
+    width: 100%;
+    height: 84px !important;
+    z-index: 9999;
+    padding: .7rem 1rem !important;
+    border-right: none !important;
+    border-top: 1px solid rgba(255,255,255,.08);
+    background: rgba(7,17,31,.88) !important;
+    backdrop-filter: blur(24px);
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-around;
+}
+
+.brand,
+.sidebar-foot,
+.nav-title{
+    display:none !important;
+}
+
+.nav{
+    flex-direction: row !important;
+    width:100%;
+    justify-content: space-around;
+    gap:.4rem !important;
+}
+
+.nav a{
+    flex-direction: column;
+    font-size:.72rem;
+    padding:.55rem .7rem !important;
+    min-width:64px;
+    border-radius:18px !important;
+}
+
+.nav a.active{
+    background: linear-gradient(135deg,#22c55e,#0ea5e9) !important;
+    color:white !important;
+    transform: translateY(-4px);
+}
+
+.content{
+    padding: 1rem !important;
+    padding-bottom: 110px !important;
+}
+
+.topbar{
+    background: rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08);
+    padding:1rem 1.2rem;
+    border-radius:24px;
+    backdrop-filter: blur(20px);
+}
+
+.card{
+    background: rgba(255,255,255,.06) !important;
+    border:1px solid rgba(255,255,255,.08) !important;
+    backdrop-filter: blur(20px);
+    border-radius:28px !important;
+    padding:1.2rem !important;
+}
+
+.table{
+    border-collapse: separate !important;
+    border-spacing: 0 10px !important;
+}
+
+.table tr{
+    background: rgba(255,255,255,.04);
+}
+
+.table td,
+.table th{
+    border:none !important;
+    padding:14px !important;
+}
+
+.input, textarea, select{
+    background: rgba(255,255,255,.06) !important;
+    border:1px solid rgba(255,255,255,.1) !important;
+    border-radius:18px !important;
+    padding:14px !important;
+    color:white !important;
+    font-size:15px !important;
+}
+
+.btn{
+    border-radius:18px !important;
+    padding:14px 18px !important;
+    font-weight:700 !important;
+}
+
+.btn-primary{
+    background: linear-gradient(135deg,#22c55e,#0ea5e9) !important;
+    border:none !important;
+    box-shadow: 0 10px 25px rgba(14,165,233,.25);
+}
+
+.badge{
+    border-radius:999px !important;
+    padding:8px 14px !important;
+    background: rgba(34,197,94,.15) !important;
+    color:#86efac !important;
+}
+
+.stats-grid{
+    display:grid;
+    grid-template-columns: repeat(2,1fr);
+    gap:14px;
+}
+
+.stat-card{
+    background: rgba(255,255,255,.06);
+    border-radius:24px;
+    padding:1rem;
+    border:1px solid rgba(255,255,255,.08);
+}
+
+@media(min-width:900px){
+    .layout{
+        grid-template-columns: 280px 1fr !important;
+    }
+
+    .sidebar{
+        top:0 !important;
+        bottom:auto !important;
+        width:280px !important;
+        height:100vh !important;
+        flex-direction:column !important;
+        justify-content:flex-start;
+    }
+
+    .brand,
+    .sidebar-foot,
+    .nav-title{
+        display:block !important;
+    }
+
+    .nav{
+        flex-direction:column !important;
+    }
+
+    .nav a{
+        flex-direction:row !important;
+    }
+
+    .content{
+        padding-bottom:2rem !important;
+    }
+}
+
+/* ===== PREMIUM LOGIN PAGE ===== */
+.login-premium{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:1.5rem;
+    background:
+      radial-gradient(circle at top right, rgba(34,197,94,.2), transparent 25%),
+      radial-gradient(circle at bottom left, rgba(14,165,233,.2), transparent 25%),
+      #07111f;
+}
+
+.login-box{
+    width:100%;
+    max-width:420px;
+    background: rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:32px;
+    padding:2rem;
+    backdrop-filter: blur(24px);
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+
+.login-logo{
+    width:82px;
+    height:82px;
+    border-radius:26px;
+    margin:auto;
+    margin-bottom:1rem;
+    background: linear-gradient(135deg,#22c55e,#0ea5e9);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2rem;
+    color:white;
+    font-weight:800;
+}
+
+.login-title{
+    text-align:center;
+    font-size:2rem;
+    font-weight:800;
+    color:white;
+    margin-bottom:.5rem;
+}
+
+.login-sub{
+    text-align:center;
+    color:#94a3b8;
+    margin-bottom:1.8rem;
+}
+
+.login-input{
+    width:100%;
+    padding:16px;
+    border-radius:18px;
+    border:1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.06);
+    color:white;
+    margin-bottom:1rem;
+}
+
+.login-btn{
+    width:100%;
+    padding:16px;
+    border:none;
+    border-radius:18px;
+    font-weight:800;
+    background: linear-gradient(135deg,#22c55e,#0ea5e9);
+    color:white;
+    box-shadow: 0 12px 30px rgba(14,165,233,.3);
+}
+
+/* Base styles */
         :root {
             --bg: #0f172a;
             --bg-light: #1a202c;
