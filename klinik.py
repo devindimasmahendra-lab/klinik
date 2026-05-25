@@ -453,6 +453,105 @@ def render_page(title, body_tpl, **ctx):
       <style>
         
 /* ===== PREMIUM MOBILE UI REDESIGN ===== */
+
+/* Make all tables scrollable directly on mobile */
+
+/* Make all tables scrollable directly on mobile */
+@media (max-width: 600px) {
+    table {
+        display: block !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        white-space: nowrap !important;
+    }
+}
+
+/* === TAMBAHAN FIX MOBILE IPHONE 16 PRO === */
+@media (max-width: 600px) {
+    .content {
+        padding: 0.75rem !important;
+        padding-bottom: 120px !important; /* Spasi untuk bottom navbar */
+    }
+    
+    .card {
+        padding: 1rem !important;
+        border-radius: 20px !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* G2, G3, G4 paksa 1 kolom di HP */
+    .g2, .g3, .g4, .grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem !important;
+    }
+    
+    /* Toolbar agar elemen tidak memanjang keluar layar */
+    .toolbar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.5rem !important;
+    }
+    
+    .toolbar .btn, .toolbar select, .toolbar input {
+        width: 100% !important;
+        max-width: none !important;
+    }
+    
+    /* Atur elemen flex yang ada di judul card agar turun ke baris baru kalau sempit */
+    .flex, [style*="display:flex"], [style*="display: flex"] {
+        flex-wrap: wrap !important;
+    }
+    
+    /* Sembunyikan badge atau elemen kurang penting jika perlu, tapi kita buat wrap saja */
+    h2, h3, h4 {
+        font-size: 1.2rem !important;
+        line-height: 1.4 !important;
+    }
+    
+    /* Ukuran text dasar sedikit dikecilkan agar muat */
+    body {
+        font-size: 14px !important;
+    }
+    
+    /* Table responsive */
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.05);
+        margin-bottom: 1rem;
+    }
+    
+    table th, table td {
+        white-space: nowrap; /* Jangan biarkan teks tabel numpuk ke bawah kalau kolomnya banyak */
+        padding: 10px !important;
+        font-size: 13px !important;
+    }
+    
+    /* Bottom Navigation Bar fix */
+    .sidebar {
+        height: 70px !important;
+        padding: 0.5rem !important;
+        justify-content: space-between !important;
+    }
+    
+    .nav {
+        gap: 0 !important;
+    }
+    
+    .nav a {
+        padding: 0.4rem !important;
+        min-width: 50px !important;
+        font-size: 0.65rem !important;
+    }
+    
+    .nav-title, .sidebar-foot, .brand {
+        display: none !important;
+    }
+}
+
 /* Container khusus agar tabel bisa digeser di smartphone */
 .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 1rem; }
 .risk-badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
@@ -1013,7 +1112,6 @@ def appointments():
         <a class="btn btn-primary" href="{{ url_for('add_appointment') }}">+ Tambah Appointment</a>
       </div>
 
-      <div style="overflow:auto">
       <table class="table">
         <thead>
           <tr>
@@ -1622,8 +1720,7 @@ def patient_detail(patient_id):
     <div class="card" style="margin-top:16px">
       <h3 class="flex items-center gap-2"><span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span> Ringkasan Perkembangan Janin</h3>
       <div class="small muted mb-3">Data historis dari kunjungan sebelumnya untuk memantau tren pertumbuhan.</div>
-      <div style="overflow-x:auto">
-        <table class="w-full text-sm">
+      <table class="w-full text-sm">
           <thead class="bg-slate-800/50">
             <tr><th class="p-3">Tanggal</th><th class="p-3">Usia Hamil</th><th class="p-3">DJJ (bpm)</th><th class="p-3">Posisi</th><th class="p-3">Berat (gr)</th></tr>
           </thead>
@@ -1678,8 +1775,7 @@ def patient_history(patient_id):
             <span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span>
             Monitoring Perkembangan Janin (USG)
         </h3>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm border-collapse">
+        <table class="w-full text-sm border-collapse">
                 <thead>
                     <tr class="text-slate-500 bg-slate-800/50 uppercase text-[10px] tracking-widest border-b border-slate-700">
                         <th class="py-3 px-4 text-left">Tgl Periksa</th>
