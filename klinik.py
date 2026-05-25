@@ -1048,6 +1048,7 @@ body{
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}">📚 Rekam Medis (History)</a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='patient_new' else '' }}">➕ Input Pasien</a>{% endif %}
             <div class="nav-title">Operasional</div>
+            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('panduan_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_page' else '' }}">📖 Panduan Sistem</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('soap_templates_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='soap_templates_page' else '' }}">🧩 Template SOAP</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='sop_page' else '' }}">📋 SOP Klinik</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('uploads_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='uploads_page' else '' }}">📁 Hasil USG</a>{% endif %}
@@ -1304,37 +1305,59 @@ def login():
             return redirect(request.args.get('next') or url_for('dashboard'))
         log_action('LOGIN_FAILED', 'Gagal login: ' + username)
         flash('Username atau password salah.', 'danger')
+
     body = '''
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0b1120,#162033);padding:20px">
-      <div style="width:100%;max-width:440px;animation:fade .5s ease">
-        <div style="text-align:center;margin-bottom:24px">
-          <div style="width:72px;height:72px;border-radius:24px;background:linear-gradient(135deg,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;font-weight:900;margin:0 auto 16px;box-shadow:0 8px 32px rgba(34,197,94,.3)">USG</div>
-          <h1 style="margin:0;font-size:24px;color:#e5e7eb">{{ app_name }}</h1>
-          <p style="color:#94a3b8;margin:8px 0 0;font-size:14px">Sistem Informasi Klinik USG 4D — Masuk ke akun Anda</p>
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg-light),var(--bg));padding:20px;position:relative;overflow:hidden">
+      <!-- Decorative background elements -->
+      <div style="position:absolute;top:-10%;left:-10%;width:40vw;height:40vw;background:radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%);border-radius:50%"></div>
+      <div style="position:absolute;bottom:-10%;right:-10%;width:40vw;height:40vw;background:radial-gradient(circle, rgba(14,165,233,0.05) 0%, transparent 70%);border-radius:50%"></div>
+      
+      <div style="width:100%;max-width:400px;animation:fade .6s ease;z-index:10">
+        <div style="text-align:center;margin-bottom:2rem">
+          <div style="width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:36px;font-weight:900;margin:0 auto 20px;box-shadow:0 12px 30px rgba(14,165,233,.3);letter-spacing:-1px">USG</div>
+          <h1 style="margin:0;font-size:26px;color:var(--text);font-weight:800;letter-spacing:-0.5px">Klinik Arissa</h1>
+          <p style="color:var(--text-muted);margin:8px 0 0;font-size:14px;font-weight:500">Sistem Informasi Medis Terpadu</p>
         </div>
-        {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div style="margin-bottom:16px">{% for cat,msg in messages %}<div style="padding:12px 16px;border-radius:14px;border:1px solid {% if cat=='success' %}rgba(34,197,94,.4){% elif cat=='danger' %}rgba(239,68,68,.4){% else %}rgba(245,158,11,.4){% endif %};background:rgba(255,255,255,.06);color:#e5e7eb;font-size:14px;margin-bottom:8px">{{ msg }}</div>{% endfor %}</div>{% endif %}{% endwith %}
-        <form method="post" style="background:rgba(255,255,255,.08);border:1px solid rgba(148,163,184,.18);border-radius:24px;padding:28px;backdrop-filter:blur(16px);box-shadow:0 12px 30px rgba(2,6,23,.22)">
-          <div style="margin-bottom:18px">
-            <label style="display:block;font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:8px">Username</label>
-            <input class="input" name="username" required placeholder="Masukkan username" style="width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.05);color:#e5e7eb;outline:none;font-size:15px">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div style="margin-bottom:20px">
+          {% for cat,msg in messages %}
+          <div style="padding:14px 18px;border-radius:16px;border:1px solid {% if cat=='success' %}rgba(34,197,94,.4){% elif cat=='danger' %}rgba(239,68,68,.4){% else %}rgba(245,158,11,.4){% endif %};background:var(--card);color:var(--text);font-size:14px;font-weight:500;box-shadow:var(--shadow);display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">{% if cat=='danger' %}⚠️{% elif cat=='success' %}✅{% else %}ℹ️{% endif %}</span> {{ msg }}
           </div>
-          <div style="margin-bottom:24px">
-            <label style="display:block;font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:8px">Password</label>
-            <input class="input" type="password" name="password" required placeholder="••••••••" style="width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.05);color:#e5e7eb;outline:none;font-size:15px">
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        
+        <form method="post" style="background:var(--card);border:1px solid var(--border);border-radius:28px;padding:32px;backdrop-filter:blur(20px);box-shadow:0 24px 60px rgba(0,0,0,.2)">
+          <div style="margin-bottom:20px">
+            <label style="display:block;font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Username</label>
+            <div style="position:relative">
+              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text-muted)">👤</span>
+              <input class="input" name="username" required placeholder="Masukkan username" style="width:100%;padding:16px 16px 16px 48px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);outline:none;font-size:15px;transition:all 0.3s ease" onfocus="this.style.borderColor='#22c55e';this.style.background='rgba(255,255,255,.06)'" onblur="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,.03)'">
+            </div>
           </div>
-          <button class="btn btn-primary" style="width:100%;padding:14px;border-radius:16px;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#fff;font-weight:700;font-size:16px;border:none;cursor:pointer">🔐 Masuk ke Dashboard</button>
+          
+          <div style="margin-bottom:30px">
+            <label style="display:block;font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Password</label>
+            <div style="position:relative">
+              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text-muted)">🔒</span>
+              <input class="input" type="password" name="password" required placeholder="••••••••" style="width:100%;padding:16px 16px 16px 48px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);outline:none;font-size:15px;transition:all 0.3s ease" onfocus="this.style.borderColor='#0ea5e9';this.style.background='rgba(255,255,255,.06)'" onblur="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,.03)'">
+            </div>
+          </div>
+          
+          <button class="btn btn-primary" style="width:100%;padding:16px;border-radius:16px;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#fff;font-weight:800;font-size:16px;border:none;cursor:pointer;box-shadow:0 12px 30px rgba(14,165,233,.25);transition:all 0.3s ease" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 15px 35px rgba(14,165,233,.35)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 12px 30px rgba(14,165,233,.25)'">Masuk ke Sistem ➡️</button>
         </form>
-        <div style="margin-top:20px;background:rgba(255,255,255,.06);border:1px solid rgba(148,163,184,.18);border-radius:20px;padding:20px;backdrop-filter:blur(8px)">
-          <div style="font-weight:700;color:#e5e7eb;margin-bottom:10px;font-size:14px">👤 Akun Default</div>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>superadmin</span><span style="color:#22c55e;font-family:monospace">admin123</span></div>
-            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>admin</span><span style="color:#22c55e;font-family:monospace">admin123</span></div>
-            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>dokter</span><span style="color:#22c55e;font-family:monospace">dokter123</span></div>
-          </div>
+        
+        <div style="text-align:center;margin-top:30px;color:var(--text-muted);font-size:13px;font-weight:500">
+          &copy; 2026 Klinik Arissa USG 4D
         </div>
       </div>
     </div>
     '''
+
     return render_page('Login', body, app_name=APP_NAME)
 
 
@@ -1975,6 +1998,78 @@ def soap_templates_page():
     <div class="g2 grid"><div class="card no-print"><h3>Tambah Template SOAP Cepat</h3><form method="post" class="grid"><div><label>Judul Template</label><input class="input" name="title" required></div><div><label>Subjective</label><textarea class="textarea" name="subjective"></textarea></div><div><label>Objective</label><textarea class="textarea" name="objective"></textarea></div><div><label>Assessment</label><textarea class="textarea" name="assessment"></textarea></div><div><label>Plan</label><textarea class="textarea" name="plan"></textarea></div><button class="btn btn-primary">💾 Simpan Template</button></form></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar Template SOAP</h3><span class="badge">{{ rows|length }} template</span></div>{% if rows %}{% for r in rows %}<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><strong>{{ r['title'] }}</strong><span class="small muted">{{ r['username'] or '-' }}</span></div><div class="wrap"><strong>S:</strong> {{ r['subjective'] or '-' }}</div><div class="wrap"><strong>O:</strong> {{ r['objective'] or '-' }}</div><div class="wrap"><strong>A:</strong> {{ r['assessment'] or '-' }}</div><div class="wrap"><strong>P:</strong> {{ r['plan'] or '-' }}</div></div>{% endfor %}{% else %}<div class="empty">Belum ada template.</div>{% endif %}</div></div>
     '''
     return render_page('Template SOAP Cepat', body, rows=rows)
+
+
+
+@app.route('/panduan')
+@role_required('superadmin', 'admin', 'dokter')
+def panduan_page():
+    body = '''
+    <div class="hero card mb-6">
+        <div>
+            <h3 class="text-2xl font-bold text-white mb-2">📚 Panduan Penggunaan Sistem</h3>
+            <div class="text-slate-400">Dokumentasi operasional Klinik Arissa USG 4D untuk Dokter dan Admin.</div>
+        </div>
+    </div>
+    
+    <div class="g2 grid mb-6">
+        <div class="card">
+            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">👨‍⚕️ Panduan Untuk Dokter</h4>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <h5 class="font-bold text-white mb-2">1. Manajemen Antrian</h5>
+                    <p>Buka menu <strong>"Antrian Hari Ini"</strong>. Anda akan melihat daftar pasien yang sedang menunggu. Klik tombol <strong>"Periksa"</strong> untuk masuk ke rekam medis pasien tersebut.</p>
+                </div>
+                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <h5 class="font-bold text-white mb-2">2. Pengisian SOAP & Data USG</h5>
+                    <p>Di halaman detail pasien, gulir ke bagian <strong>"SOAP Pemeriksaan"</strong>. Anda dapat menggunakan <em>Template SOAP Cepat</em> untuk mengisi kerangka dasar secara otomatis. Pastikan untuk mengisi parameter janin (Usia, DJJ, Posisi, EBJ) karena sistem akan <strong class="text-amber-400">otomatis menghitung skor risiko kehamilan</strong> berdasarkan TD dan DJJ.</p>
+                </div>
+                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <h5 class="font-bold text-white mb-2">3. Upload Hasil USG & Berbagi Link</h5>
+                    <p>Gunakan kolom <strong>"Upload Hasil USG"</strong> untuk mengunggah foto/video (maks. 32MB). Anda tidak perlu mencetak fisik, cukup klik <strong>"Copy Link"</strong> atau tunjukkan QR Code pada pasien agar mereka dapat mengunduh hasilnya sendiri di HP mereka.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">👩‍💻 Panduan Untuk Admin</h4>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <h5 class="font-bold text-white mb-2">1. Registrasi Pasien Baru</h5>
+                    <p>Gunakan menu <strong>"Input Pasien"</strong>. Jika pasien sudah pernah mendaftar, ketik nama atau No RM pada kolom pencarian di bagian atas, lalu klik pasien tersebut untuk dimasukkan kembali ke antrian hari ini (tanpa perlu input ulang).</p>
+                </div>
+                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <h5 class="font-bold text-white mb-2">2. Pengaturan Status & Kasir (Billing)</h5>
+                    <p>Setelah pasien selesai diperiksa dokter, gulir ke bawah pada detail pasien untuk menambahkan rincian biaya (Billing). Setelah pembayaran selesai, klik tombol <strong>"LUNAS"</strong> dan ubah status antrian pasien menjadi <strong>"selesai"</strong>.</p>
+                </div>
+                <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <h5 class="font-bold text-white mb-2">3. Manajemen Pengguna & Keamanan</h5>
+                    <p>Superadmin dapat menambah akun dokter atau admin baru di menu <strong>"User"</strong>. Pastikan rutin mengunduh cadangan database melalui menu <strong>"Settings / Backup"</strong> di panel kiri bawah setidaknya seminggu sekali.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h4 class="text-white font-bold mb-3">Sistem Peringatan Risiko Kehamilan Otomatis</h4>
+        <div class="text-sm text-slate-300 mb-4">Sistem akan membaca angka Tekanan Darah dan Detak Jantung Janin (DJJ) pada form SOAP.</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <div class="font-bold text-red-400 mb-1">🔴 Risiko Tinggi (Merah)</div>
+                <div class="text-xs text-slate-400">Tekanan Darah >= 160/110 atau DJJ di luar 100-170 bpm. Indikasi gawat janin/preeklampsia.</div>
+            </div>
+            <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <div class="font-bold text-amber-400 mb-1">🟡 Risiko Sedang (Kuning)</div>
+                <div class="text-xs text-slate-400">Tekanan Darah >= 140/90 atau DJJ di batas 110-160 bpm. Butuh pantauan lanjut.</div>
+            </div>
+            <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                <div class="font-bold text-emerald-400 mb-1">🟢 Normal (Hijau)</div>
+                <div class="text-xs text-slate-400">Tekanan Darah dan DJJ berada dalam ambang batas aman.</div>
+            </div>
+        </div>
+    </div>
+    '''
+    return render_page('Panduan Penggunaan', body)
 
 
 @app.route('/sop')
