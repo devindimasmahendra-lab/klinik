@@ -58,6 +58,23 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+
+def hitung_risiko_kehamilan(td_sistolik, td_diastolik, djj):
+    try:
+        sys = int(str(td_sistolik).strip()) if td_sistolik else 120
+        dia = int(str(td_diastolik).strip()) if td_diastolik else 80
+        # Try to parse string with digits like "145 bpm"
+        d = int(''.join(filter(str.isdigit, str(djj)))) if djj else 140
+    except ValueError:
+        return {'status': 'Hijau', 'label': 'Risiko Rendah (Data Tidak Lengkap)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
+
+    if sys >= 160 or dia >= 110 or d < 100 or d > 170:
+        return {'status': 'Merah', 'label': 'Risiko Tinggi (Peringatan Dini)', 'color': '#ef4444', 'bg': 'rgba(239,68,68,0.15)'}
+    elif sys >= 140 or dia >= 90 or d < 110 or d > 160:
+        return {'status': 'Kuning', 'label': 'Risiko Sedang (Pantau Lanjut)', 'color': '#f59e0b', 'bg': 'rgba(245,158,11,0.15)'}
+    else:
+        return {'status': 'Hijau', 'label': 'Risiko Rendah (Normal)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
+
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -366,6 +383,40 @@ def api_patient_by_id(patient_id):
     return {'result': dict(row)}
 
 
+
+@app.route('/api/fetal_growth/<int:patient_id>')
+@role_required('superadmin', 'admin', 'dokter')
+def api_fetal_growth(patient_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute('''
+        SELECT created_at, detak_jantung_janin, estimasi_berat_janin, usia_kehamilan 
+        FROM soap_records 
+        WHERE patient_id=? 
+        ORDER BY created_at ASC
+    ''', (patient_id,))
+    rows = cur.fetchall()
+    conn.close()
+    
+    labels = []
+    djj_data = []
+    ebj_data = []
+    
+    for r in rows:
+        labels.append(f"{r['usia_kehamilan'] or '?'} ({fmt_dt(r['created_at'])[:10]})")
+        try: 
+            djj_val = int(''.join(filter(str.isdigit, str(r['detak_jantung_janin']))))
+        except: 
+            djj_val = None
+        try: 
+            ebj_val = int(''.join(filter(str.isdigit, str(r['estimasi_berat_janin']))))
+        except: 
+            ebj_val = None
+        djj_data.append(djj_val)
+        ebj_data.append(ebj_val)
+
+    return {'labels': labels, 'djj': djj_data, 'ebj': ebj_data}
+
+
 @app.route('/api/patient_visits/<int:patient_id>')
 @role_required('superadmin', 'admin')
 def api_patient_visits(patient_id):
@@ -383,6 +434,7 @@ def render_page(title, body_tpl, **ctx):
     page_ctx = dict(ctx)
     page_ctx['user'] = user
     page_ctx['current_user'] = user
+    page_ctx['hitung_risiko_kehamilan'] = hitung_risiko_kehamilan
     page_ctx['title'] = title
     body = render_template_string(body_tpl, **page_ctx)
     base = '''
@@ -397,9 +449,21 @@ def render_page(title, body_tpl, **ctx):
       <meta name="mobile-web-app-capable" content="yes">
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
       <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
         
 /* ===== PREMIUM MOBILE UI REDESIGN ===== */
+/* Container khusus agar tabel bisa digeser di smartphone */
+.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 1rem; }
+.risk-badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; }
+@keyframes pulseRisk { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+.risk-merah { animation: pulseRisk 2s infinite; }
+@media(max-width: 900px) {
+    .btn { width: 100%; text-align: center; justify-content: center; }
+    .form2, .form3 { grid-template-columns: 1fr !important; gap: 1rem; }
+    .card { padding: 1rem !important; }
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 body{
@@ -1662,6 +1726,13 @@ def patient_history(patient_id):
                                 <div>
                                     <div class="text-emerald-400 font-bold">{{ fmt_dt(s['created_at']) }}</div>
                                     <div class="text-[10px] text-slate-500 uppercase tracking-tighter">Pemeriksa: {{ s['doctor_name'] or s['doctor_username'] or '-' }}</div>
+                                    
+{% set risk = hitung_risiko_kehamilan(s['td_sistolik'], s['td_diastolik'], s['detak_jantung_janin']) %}
+<span class="risk-badge {% if risk.status == 'Merah' %}risk-merah{% endif %}" style="background: {{ risk.bg }}; color: {{ risk.color }}; border: 1px solid {{ risk.color }};">
+    {% if risk.status == 'Merah' %} ⚠️ {% elif risk.status == 'Kuning' %} ⚡ {% else %} ✅ {% endif %}
+    {{ risk.label }}
+</span>
+
                                 </div>
                                 <div class="flex gap-2">
                                     {% if s['informed_consent'] %}<span class="badge bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px]">Consent OK</span>{% endif %}
