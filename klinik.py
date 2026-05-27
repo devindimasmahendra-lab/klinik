@@ -18,6 +18,17 @@
 #    /api/patient_visits) diposisikan setelah helper functions terdefinisi.
 # ======================================================
 
+def get_master_options(category):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute('SELECT options_text FROM master_options WHERE category=?', (category,))
+    row = cur.fetchone()
+    conn.close()
+    if not row or not row['options_text']:
+        return []
+    return [x.strip() for x in row['options_text'].splitlines() if x.strip()]
+
+
 
 # klinik.py - Single-file Flask app untuk sistem klinik USG 4D
 # Jalankan: python klinik.py
@@ -302,6 +313,14 @@ def init_db():
             cur.execute('ALTER TABLE {} ADD COLUMN {}'.format(tbl, col) + ' ' + typ)
         except sqlite3.OperationalError:
             pass  # kolom sudah ada
+        default_master_options = {
+        'golongan_darah': 'A\nB\nAB\nO',
+        'pekerjaan': 'Karyawan Swasta\nWiraswasta\nIbu Rumah Tangga\nPelajar/Mahasiswa\nPNS\nLainnya',
+        'jenis_layanan': 'USG 2D\nUSG 4D\nKonsultasi\nKontrol Kehamilan'
+    }
+    for category, options_text in default_master_options.items():
+        cur.execute('INSERT OR IGNORE INTO master_options(category, options_text) VALUES(?,?)', (category, options_text))
+
     conn.commit()
     conn.close()
 
@@ -579,6 +598,24 @@ table tr:hover td{
   .toolbar .btn{
     flex:1 1 calc(50% - 8px);
     justify-content:center;
+  }
+  table .toolbar, td .toolbar{
+    position:sticky;
+    right:0;
+    background:var(--card);
+    padding:4px;
+    border-radius:12px;
+    z-index:3;
+  }
+  .table-wrap{
+    overflow-x:auto;
+    padding-bottom:6px;
+  }
+  td:last-child, th:last-child{
+    position:sticky;
+    right:0;
+    background:var(--card);
+    z-index:2;
   }
   .patient-header{
     flex-direction:column;
@@ -1785,7 +1822,7 @@ def patient_new():
       <div class="small muted">Ketik nama / RM / NIK untuk mencari pasien yang sudah terdaftar, lalu pilih untuk mengedit datanya.</div>
       <div style="position:relative;margin-top:10px">
         <input class="input" id="searchExisting" placeholder="Ketik minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="position:absolute;top:100%;left:0;right:0;max-height:300px;overflow-y:auto;background:var(--card2);border:1px solid var(--border);border-radius:16px;z-index:100;display:none"></div>
+        <div id="searchResults" style="position:absolute;top:100%;left:0;right:0;max-height:300px;overflow-y:auto;background:var(--card2);border:1px solid var(--border);border-radius:16px;z-index:9999;box-shadow:0 18px 45px rgba(0,0,0,.35);display:none"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,.1)"></div>
     </div>
@@ -1809,11 +1846,11 @@ def patient_new():
           </div>
           <div><label>Umur (otomatis dari TTL)</label><input class="input" name="umur" id="fumur" value="{{ edit_patient['umur'] if edit_patient else '' }}" readonly placeholder="Terisi otomatis"></div>
           <div><label>Nomor HP</label><input class="input" name="nomor_hp" id="fhp" value="{{ edit_patient['nomor_hp'] if edit_patient else '' }}"></div>
-          <div><label>Golongan Darah</label><input class="input" name="golongan_darah" id="fgoldar" value="{{ edit_patient['golongan_darah'] if edit_patient else '' }}"></div>
+          <div><label>Golongan Darah</label><select class="select" name="golongan_darah" id="fgoldar"><option value="">- Pilih Golongan Darah -</option>{% for item in golongan_darah_options %}<option value="{{ item }}" {{ 'selected' if edit_patient and edit_patient['golongan_darah']==item else '' }}>{{ item }}</option>{% endfor %}</select></div>
           <div><label>Status</label><input class="input" name="status_perkawinan" id="fstatus" value="{{ edit_patient['status_perkawinan'] if edit_patient else '' }}" placeholder="mis. Menikah"></div>
-          <div><label>Pekerjaan</label><input class="input" name="pekerjaan" id="fpekerjaan" value="{{ edit_patient['pekerjaan'] if edit_patient else '' }}"></div>
+          <div><label>Pekerjaan</label><select class="select" name="pekerjaan" id="fpekerjaan"><option value="">- Pilih Pekerjaan -</option>{% for item in pekerjaan_options %}<option value="{{ item }}" {{ 'selected' if edit_patient and edit_patient['pekerjaan']==item else '' }}>{{ item }}</option>{% endfor %}</select></div>
           <div><label>Nama Suami/Keluarga</label><input class="input" name="nama_keluarga" id="fkeluarga" value="{{ edit_patient['nama_keluarga'] if edit_patient else '' }}"></div>
-          <div><label>Jenis Layanan</label><input class="input" name="jenis_layanan" id="flayanan" value="{{ edit_patient['jenis_layanan'] if edit_patient else '' }}" placeholder="mis. USG 4D"></div>
+          <div><label>Jenis Layanan</label><select class="select" name="jenis_layanan" id="flayanan"><option value="">- Pilih Jenis Layanan -</option>{% for item in layanan_options %}<option value="{{ item }}" {{ 'selected' if edit_patient and edit_patient['jenis_layanan']==item else '' }}>{{ item }}</option>{% endfor %}</select></div>
           <div><label>Dokter Tujuan</label><select class="select" name="dokter_tujuan" id="fdokter"><option value="">- Pilih Dokter -</option>{% for d in doctors %}<option value="{{ d['full_name'] or d['username'] }}" {{ 'selected' if edit_patient and edit_patient['dokter_tujuan']==(d['full_name'] or d['username']) else '' }}>{{ d['full_name'] or d['username'] }}</option>{% endfor %}</select></div>
           <div><label>Status Antrian</label><select class="select" name="status_antrian" id="fstatusq"><option value="menunggu">menunggu</option><option value="diperiksa">diperiksa</option><option value="selesai">selesai</option></select></div>
           <div style="grid-column:1/-1"><label>Alamat</label><textarea class="textarea" name="alamat" id="falamat">{{ edit_patient['alamat'] if edit_patient else '' }}</textarea></div>
@@ -1912,7 +1949,7 @@ def patient_new():
     });
     </script>
     '''
-    return render_page('Input Pasien Baru', body, doctors=doctors, edit_patient=edit_patient)
+    return render_page('Input Pasien Baru', body, doctors=doctors, edit_patient=edit_patient, golongan_darah_options=get_master_options('golongan_darah'), pekerjaan_options=get_master_options('pekerjaan'), layanan_options=get_master_options('jenis_layanan'))
 
 
 @app.route('/patients/<int:patient_id>', methods=['GET', 'POST'])
@@ -2448,6 +2485,19 @@ def settings():
                 flash('Konfirmasi password tidak cocok.', 'danger')
             else:
                 conn = db(); cur = conn.cursor(); cur.execute('UPDATE users SET password_hash=?, updated_at=? WHERE id=?', (generate_password_hash(new), now(), user['id'])); conn.commit(); conn.close(); log_action('CHANGE_PASSWORD', user['username']); flash('Password berhasil diubah.', 'success'); return redirect(url_for('settings'))
+        master_fields = {
+            'golongan_darah':'master_golongan_darah',
+            'pekerjaan':'master_pekerjaan',
+            'jenis_layanan':'master_jenis_layanan'
+        }
+        if any(request.form.get(v) is not None for v in master_fields.values()):
+            conn = db(); cur = conn.cursor()
+            for category, field in master_fields.items():
+                cur.execute('UPDATE master_options SET options_text=? WHERE category=?', (request.form.get(field,''), category))
+            conn.commit(); conn.close()
+            flash('Master dropdown berhasil diperbarui.', 'success')
+            return redirect(url_for('settings'))
+
     body = '''
     <div class="g2 grid">
       <div class="card no-print">
@@ -2474,12 +2524,21 @@ def settings():
           <div><span class="text-slate-400">Dibuat:</span> {{ fmt_dt(user['created_at']) }}</div>
         </div>
         <div class="small muted mt-4 p-3 bg-slate-800/30 rounded-lg">
-          Tips: Dokter disarankan menggunakan nama lengkap beserta gelar untuk tampilan pada rekam medis (SOAP) dan link hasil pasien agar lebih profesional.
+          
+        <hr style="margin:24px 0; border:0; border-top:1px solid var(--border)">
+        <h3>Master Dropdown Pasien</h3>
+        <form method="post" class="grid">
+          <div><label>Golongan Darah (1 baris 1 opsi)</label><textarea class="textarea" name="master_golongan_darah">{{ master_golongan_darah }}</textarea></div>
+          <div><label>Pekerjaan (1 baris 1 opsi)</label><textarea class="textarea" name="master_pekerjaan">{{ master_pekerjaan }}</textarea></div>
+          <div><label>Jenis Layanan (1 baris 1 opsi)</label><textarea class="textarea" name="master_jenis_layanan">{{ master_jenis_layanan }}</textarea></div>
+          <button class="btn btn-primary">💾 Simpan Master Dropdown</button>
+        </form>
+Tips: Dokter disarankan menggunakan nama lengkap beserta gelar untuk tampilan pada rekam medis (SOAP) dan link hasil pasien agar lebih profesional.
         </div>
       </div>
     </div>
     '''
-    return render_page('Settings', body, fmt_dt=fmt_dt)
+    return render_page('Settings', body, fmt_dt=fmt_dt, master_golongan_darah='\n'.join(get_master_options('golongan_darah')), master_pekerjaan='\n'.join(get_master_options('pekerjaan')), master_jenis_layanan='\n'.join(get_master_options('jenis_layanan')))
 
 
 @app.route('/backup-db')
