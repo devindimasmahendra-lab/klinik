@@ -499,6 +499,102 @@ body {
 a { text-decoration: none; color: inherit; }
 h1,h2,h3,h4,h5,h6 { font-weight: 700; color: var(--text); }
 
+
+/* ---- RESPONSIVE UI UPGRADE ---- */
+.table-wrap{
+  width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  border-radius:18px;
+}
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width:720px;
+}
+table th{
+  position:sticky;
+  top:0;
+  background:rgba(15,23,42,.95);
+  backdrop-filter:blur(12px);
+  z-index:2;
+}
+table th,table td{
+  padding:14px 16px;
+  border-bottom:1px solid var(--border);
+  vertical-align:top;
+}
+table tr:hover td{
+  background:rgba(255,255,255,.03);
+}
+.action-col{
+  position:sticky;
+  right:0;
+  background:var(--bg);
+  min-width:140px;
+  z-index:3;
+}
+.action-buttons{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+.patient-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  flex-wrap:wrap;
+}
+.patient-info-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:14px;
+  margin-top:14px;
+}
+.card{
+  border-radius:22px !important;
+  overflow:hidden;
+}
+.toolbar{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+}
+@media (max-width:768px){
+  .content{
+    padding:14px !important;
+  }
+  .card{
+    padding:16px !important;
+    border-radius:18px !important;
+  }
+  .topbar{
+    gap:12px !important;
+  }
+  .toolbar .btn{
+    flex:1 1 calc(50% - 8px);
+    justify-content:center;
+  }
+  .patient-header{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .patient-info-grid{
+    grid-template-columns:1fr;
+  }
+  table{
+    min-width:640px;
+  }
+  .action-col{
+    min-width:120px;
+  }
+}
+
 /* ---- LAYOUT ---- */
 .layout {
   display: grid;
@@ -1244,7 +1340,7 @@ def appointments():
         <a class="btn btn-primary" href="{{ url_for('add_appointment') }}">+ Tambah Appointment</a>
       </div>
 
-      <table class="table">
+      <div class="table-wrap"><table class="table">
         <thead>
           <tr>
             <th>Pasien</th>
@@ -1267,7 +1363,7 @@ def appointments():
           </tr>
         {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       </div>
     </div>
     """
@@ -1561,8 +1657,8 @@ def dashboard():
     <div class="hero card"><div><h3 style="margin:0">Selamat datang, {{ user['full_name'] or user['username'] }}</h3><div class="muted">Dashboard ringkas fokus admin dan dokter.</div></div><div class="toolbar no-print">{% if user['role'] in ['superadmin','admin'] %}<a class="btn btn-primary" href="{{ url_for('patient_new') }}">➕ Input Pasien Baru</a>{% endif %}<a class="btn" href="{{ url_for('patients') }}">📋 Lihat Pasien</a></div></div>
     <div class="g4 grid" style="margin-top:16px"><div class="stat"><div class="muted small">Total pasien hari ini</div><div style="font-size:30px;font-weight:800">{{ total_today }}</div></div><div class="stat"><div class="muted small">Pasien menunggu</div><div style="font-size:30px;font-weight:800">{{ waiting }}</div></div><div class="stat"><div class="muted small">Sedang diperiksa</div><div style="font-size:30px;font-weight:800">{{ checked }}</div></div><div class="stat"><div class="muted small">Pasien selesai</div><div style="font-size:30px;font-weight:800">{{ finished }}</div></div></div>
     <div class="g2 grid" style="margin-top:16px">
-      <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Pasien Terbaru / Antrian</h3><span class="badge">Upload: {{ total_uploads }}</span></div>{% if patients_rows %}<table><thead><tr><th>Pasien</th><th>RM</th><th>Status</th><th>Dokter</th><th>Aksi</th></tr></thead><tbody>{% for p in patients_rows %}<tr><td><strong>{{ p['nama_pasien'] }}</strong><div class="small muted">{{ fmt_dt(p['created_at']) }}</div></td><td>{{ p['nomor_rekam_medis'] }}</td><td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td><td>{{ p['dokter_tujuan'] or '-' }}</td><td><a class="btn btn-sm" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Buka</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada pasien.</div>{% endif %}</div>
-      <div class="card"><h3>Audit Terbaru</h3>{% if audits %}<table><thead><tr><th>Waktu</th><th>User</th><th>Aksi</th></tr></thead><tbody>{% for a in audits %}<tr><td>{{ fmt_dt(a['created_at']) }}</td><td>{{ a['username'] or '-' }}</td><td><strong>{{ a['action'] }}</strong><div class="small muted">{{ a['details'] or '' }}</div></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada audit.</div>{% endif %}</div>
+      <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Pasien Terbaru / Antrian</h3><span class="badge">Upload: {{ total_uploads }}</span></div>{% if patients_rows %}<table><thead><tr><th>Pasien</th><th>RM</th><th>Status</th><th>Dokter</th><th>Aksi</th></tr></thead><tbody>{% for p in patients_rows %}<tr><td><strong>{{ p['nama_pasien'] }}</strong><div class="small muted">{{ fmt_dt(p['created_at']) }}</div></td><td>{{ p['nomor_rekam_medis'] }}</td><td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td><td>{{ p['dokter_tujuan'] or '-' }}</td><td><a class="btn btn-sm" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Buka</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada pasien.</div>{% endif %}</div>
+      <div class="card"><h3>Audit Terbaru</h3>{% if audits %}<table><thead><tr><th>Waktu</th><th>User</th><th>Aksi</th></tr></thead><tbody>{% for a in audits %}<tr><td>{{ fmt_dt(a['created_at']) }}</td><td>{{ a['username'] or '-' }}</td><td><strong>{{ a['action'] }}</strong><div class="small muted">{{ a['details'] or '' }}</div></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada audit.</div>{% endif %}</div>
     </div>
     '''
     return render_page('Dashboard', body, total_today=total_today, waiting=waiting, checked=checked, finished=finished, total_uploads=total_uploads, patients_rows=patients_rows, audits=audits, fmt_dt=fmt_dt)
@@ -1890,7 +1986,7 @@ def patient_detail(patient_id):
     public_url = request.url_root.rstrip('/') + url_for('patient_result', token=patient['access_token'])
     qr_uri = qr_data_uri(public_url)
     body = '''
-    <div class="g2 grid"><div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><h3 style="margin:0">{{ patient['nama_pasien'] }}</h3><div class="small muted">No RM: {{ patient['nomor_rekam_medis'] }} • Dibuat: {{ fmt_dt(patient['created_at']) }}</div></div><span class="badge {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span></div><div class="pill-list" style="margin:12px 0"><span class="pill">NIK: {{ patient['nik'] or '-' }}</span><span class="pill">Umur: {{ patient['umur'] or '-' }}</span><span class="pill">Gol. darah: {{ patient['golongan_darah'] or '-' }}</span><span class="pill">Layanan: {{ patient['jenis_layanan'] or '-' }}</span></div><div class="grid"><div><strong>Alamat:</strong><div class="muted">{{ patient['alamat'] or '-' }}</div></div><div><strong>HP:</strong> {{ patient['nomor_hp'] or '-' }}</div><div><strong>Status:</strong> {{ patient['status_perkawinan'] or '-' }}</div><div><strong>Pekerjaan:</strong> {{ patient['pekerjaan'] or '-' }}</div><div><strong>Suami/Keluarga:</strong> {{ patient['nama_keluarga'] or '-' }}</div><div><strong>Dokter Tujuan:</strong> {{ patient['dokter_tujuan'] or '-' }}</div></div></div>
+    <div class="g2 grid"><div class="card"><div class="patient-header"><div><h3 style="margin:0">{{ patient['nama_pasien'] }}</h3><div class="small muted">No RM: {{ patient['nomor_rekam_medis'] }} • Dibuat: {{ fmt_dt(patient['created_at']) }}</div></div><span class="badge {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span></div><div class="pill-list" style="margin:12px 0"><span class="pill">NIK: {{ patient['nik'] or '-' }}</span><span class="pill">Umur: {{ patient['umur'] or '-' }}</span><span class="pill">Gol. darah: {{ patient['golongan_darah'] or '-' }}</span><span class="pill">Layanan: {{ patient['jenis_layanan'] or '-' }}</span></div><div class="patient-info-grid"><div><strong>Alamat:</strong><div class="muted">{{ patient['alamat'] or '-' }}</div></div><div><strong>HP:</strong> {{ patient['nomor_hp'] or '-' }}</div><div><strong>Status:</strong> {{ patient['status_perkawinan'] or '-' }}</div><div><strong>Pekerjaan:</strong> {{ patient['pekerjaan'] or '-' }}</div><div><strong>Suami/Keluarga:</strong> {{ patient['nama_keluarga'] or '-' }}</div><div><strong>Dokter Tujuan:</strong> {{ patient['dokter_tujuan'] or '-' }}</div></div></div>
     <div class="card"><h3>Akses Hasil Pasien</h3><div class="small muted">Bagikan link token unik ini ke pasien.</div><div class="mono wrap" style="margin:10px 0 14px">{{ public_url }}</div><div class="toolbar no-print"><a class="btn btn-primary" href="{{ url_for('patient_result', token=patient['access_token']) }}" target="_blank">🔗 Buka Link</a><button class="btn" onclick="navigator.clipboard.writeText({{ public_url|tojson }});alert('Link disalin');">📋 Copy Link</button></div>{% if qr_uri %}<div style="margin-top:14px"><img src="{{ qr_uri }}" style="max-width:180px;border-radius:18px;background:#fff;padding:10px"></div>{% else %}<div class="small muted" style="margin-top:14px">QR code aktif jika modul qrcode tersedia. Link tetap bisa dipakai.</div>{% endif %}</div></div>
     <div class="toolbar no-print" style="margin-top:16px">
         <form method="post" onsubmit="return confirm('Antrikan pasien ini?')"><input type="hidden" name="action" value="add_to_queue"><button class="btn btn-primary">➕ Masukkan ke Antrian Hari Ini</button></form>
@@ -2269,9 +2365,22 @@ def billing_page():
     sql += ' ORDER BY b.created_at DESC'; cur.execute(sql, tuple(params)); rows = cur.fetchall(); conn.close()
     body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari pasien / RM / item billing..."><button class="btn btn-primary">🔍 Cari</button></form></div>
-    <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Billing Klinik</h3><span class="badge">{{ rows|length }} transaksi</span></div>{% if rows %}<table><thead><tr><th>Pasien</th><th>Item</th><th>Nominal</th><th>Status</th><th>Tanggal</th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r['nama_pasien'] }}</strong><div class="small muted">{{ r['nomor_rekam_medis'] }}</div></td><td>{{ r['item_name'] }}<div class="small muted">{{ r['notes'] or '' }}</div></td><td>{{ rupiah(r['amount']) }}</td><td><span class="badge {{ 'paid' if r['status_bayar']=='lunas' else 'unpaid' }}">{{ r['status_bayar'] }}</span></td><td>{{ fmt_dt(r['created_at']) }}</td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada billing.</div>{% endif %}</div>
+    <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Billing Klinik</h3><span class="badge">{{ rows|length }} transaksi</span></div>{% if rows %}<div class="table-wrap"><table><thead><tr><th>Pasien</th><th>Item</th><th>Nominal</th><th>Status</th><th>Tanggal</th><th class="action-col">Aksi</th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r['nama_pasien'] }}</strong><div class="small muted">{{ r['nomor_rekam_medis'] }}</div></td><td>{{ r['item_name'] }}<div class="small muted">{{ r['notes'] or '' }}</div></td><td>{{ rupiah(r['amount']) }}</td><td><span class="badge {{ 'paid' if r['status_bayar']=='lunas' else 'unpaid' }}">{{ r['status_bayar'] }}</span></td><td>{{ fmt_dt(r['created_at']) }}</td><td class="action-col"><div class="action-buttons">{% if r['status_bayar'] != 'lunas' %}<form method="post" action="{{ url_for('billing_set_lunas', billing_id=r['id']) }}"><button class="btn btn-primary btn-sm">✅ Lunas</button></form>{% else %}<span class="badge paid">Sudah Lunas</span>{% endif %}</div></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada billing.</div>{% endif %}</div>
     '''
     return render_page('Billing', body, q=q, rows=rows, rupiah=rupiah, fmt_dt=fmt_dt)
+
+
+
+@app.route('/billing/<int:billing_id>/set_lunas', methods=['POST'])
+@role_required('superadmin','admin')
+def billing_set_lunas(billing_id):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("UPDATE billing SET status_bayar='lunas' WHERE id=?", (billing_id,))
+    conn.commit()
+    conn.close()
+    flash('Billing berhasil ditandai lunas.', 'success')
+    return redirect(request.referrer or url_for('billing_page'))
 
 
 @app.route('/users', methods=['GET', 'POST'])
