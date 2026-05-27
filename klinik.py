@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# klinik.py - Single-file Flask app untuk sistem klinik USG 4D
+# Jalankan: python klinik.py
+#
+# ======================================================
+# CHANGELOG / BUG FIXES (upgraded):
+# 1. [CRITICAL] SyntaxError: "init_db():" diperbaiki menjadi "def init_db():"
+# 2. [CRITICAL] @login_required (tidak terdefinisi) diganti dengan
+#    @role_required('superadmin','admin','dokter','pasien') di:
+#    - Route /appointments
+#    - Route /api/dashboard-stats
+# 3. [CRITICAL] Urutan kode dibenahi: semua helper function
+#    (init_db, current_user, log_action, role_required, patient_allowed,
+#    get_patient, render_page) dipindah SEBELUM route-route yang
+#    membutuhkannya, sehingga tidak ada NameError saat runtime.
+# 4. [UPGRADE] Route API pasien (/api/patient_search, /api/patient_by_id,
+#    /api/patient_visits) diposisikan setelah helper functions terdefinisi.
+# ======================================================
+
 
 # klinik.py - Single-file Flask app untuk sistem klinik USG 4D
 # Jalankan: python klinik.py
@@ -39,6 +57,23 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
+
+def hitung_risiko_kehamilan(td_sistolik, td_diastolik, djj):
+    try:
+        sys = int(str(td_sistolik).strip()) if td_sistolik else 120
+        dia = int(str(td_diastolik).strip()) if td_diastolik else 80
+        # Try to parse string with digits like "145 bpm"
+        d = int(''.join(filter(str.isdigit, str(djj)))) if djj else 140
+    except ValueError:
+        return {'status': 'Hijau', 'label': 'Risiko Rendah (Data Tidak Lengkap)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
+
+    if sys >= 160 or dia >= 110 or d < 100 or d > 170:
+        return {'status': 'Merah', 'label': 'Risiko Tinggi (Peringatan Dini)', 'color': '#ef4444', 'bg': 'rgba(239,68,68,0.15)'}
+    elif sys >= 140 or dia >= 90 or d < 110 or d > 160:
+        return {'status': 'Kuning', 'label': 'Risiko Sedang (Pantau Lanjut)', 'color': '#f59e0b', 'bg': 'rgba(245,158,11,0.15)'}
+    else:
+        return {'status': 'Hijau', 'label': 'Risiko Rendah (Normal)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -112,6 +147,9 @@ def qr_data_uri(text):
         return 'data:image/png;base64,' + base64.b64encode(bio.getvalue()).decode('utf-8')
     except Exception:
         return None
+
+
+
 
 
 def init_db():
@@ -216,7 +254,20 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
         );
+        
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            doctor_name TEXT,
+            appointment_date TEXT NOT NULL,
+            complaint TEXT,
+            status TEXT NOT NULL DEFAULT 'terjadwal',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS audit_logs (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             username TEXT,
@@ -332,6 +383,40 @@ def api_patient_by_id(patient_id):
     return {'result': dict(row)}
 
 
+
+@app.route('/api/fetal_growth/<int:patient_id>')
+@role_required('superadmin', 'admin', 'dokter')
+def api_fetal_growth(patient_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute('''
+        SELECT created_at, detak_jantung_janin, estimasi_berat_janin, usia_kehamilan 
+        FROM soap_records 
+        WHERE patient_id=? 
+        ORDER BY created_at ASC
+    ''', (patient_id,))
+    rows = cur.fetchall()
+    conn.close()
+    
+    labels = []
+    djj_data = []
+    ebj_data = []
+    
+    for r in rows:
+        labels.append(f"{r['usia_kehamilan'] or '?'} ({fmt_dt(r['created_at'])[:10]})")
+        try: 
+            djj_val = int(''.join(filter(str.isdigit, str(r['detak_jantung_janin']))))
+        except: 
+            djj_val = None
+        try: 
+            ebj_val = int(''.join(filter(str.isdigit, str(r['estimasi_berat_janin']))))
+        except: 
+            ebj_val = None
+        djj_data.append(djj_val)
+        ebj_data.append(ebj_val)
+
+    return {'labels': labels, 'djj': djj_data, 'ebj': ebj_data}
+
+
 @app.route('/api/patient_visits/<int:patient_id>')
 @role_required('superadmin', 'admin')
 def api_patient_visits(patient_id):
@@ -342,11 +427,14 @@ def api_patient_visits(patient_id):
     return {'count': count}
 
 
+
+
 def render_page(title, body_tpl, **ctx):
     user = current_user()
     page_ctx = dict(ctx)
     page_ctx['user'] = user
     page_ctx['current_user'] = user
+    page_ctx['hitung_risiko_kehamilan'] = hitung_risiko_kehamilan
     page_ctx['title'] = title
     body = render_template_string(body_tpl, **page_ctx)
     base = '''
@@ -361,8 +449,253 @@ def render_page(title, body_tpl, **ctx):
       <meta name="mobile-web-app-capable" content="yes">
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
       <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
-        /* Base styles */
+        
+/* ===== PREMIUM MOBILE UI REDESIGN ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+body{
+    background:
+      radial-gradient(circle at top right, rgba(34,197,94,.18), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(14,165,233,.18), transparent 30%),
+      #07111f !important;
+}
+
+.layout{
+    grid-template-columns: 1fr !important;
+}
+
+.sidebar{
+    position: fixed !important;
+    bottom: 0 !important;
+    top: auto !important;
+    left: 0;
+    width: 100%;
+    height: 84px !important;
+    z-index: 9999;
+    padding: .7rem 1rem !important;
+    border-right: none !important;
+    border-top: 1px solid rgba(255,255,255,.08);
+    background: rgba(7,17,31,.88) !important;
+    backdrop-filter: blur(24px);
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-around;
+}
+
+.brand,
+.sidebar-foot,
+.nav-title{
+    display:none !important;
+}
+
+.nav{
+    flex-direction: row !important;
+    width:100%;
+    justify-content: space-around;
+    gap:.4rem !important;
+}
+
+.nav a{
+    flex-direction: column;
+    font-size:.72rem;
+    padding:.55rem .7rem !important;
+    min-width:64px;
+    border-radius:18px !important;
+}
+
+.nav a.active{
+    background: linear-gradient(135deg,#22c55e,#0ea5e9) !important;
+    color:white !important;
+    transform: translateY(-4px);
+}
+
+.content{
+    padding: 1rem !important;
+    padding-bottom: 110px !important;
+}
+
+.topbar{
+    background: rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08);
+    padding:1rem 1.2rem;
+    border-radius:24px;
+    backdrop-filter: blur(20px);
+}
+
+.card{
+    background: rgba(255,255,255,.06) !important;
+    border:1px solid rgba(255,255,255,.08) !important;
+    backdrop-filter: blur(20px);
+    border-radius:28px !important;
+    padding:1.2rem !important;
+}
+
+.table{
+    border-collapse: separate !important;
+    border-spacing: 0 10px !important;
+}
+
+.table tr{
+    background: rgba(255,255,255,.04);
+}
+
+.table td,
+.table th{
+    border:none !important;
+    padding:14px !important;
+}
+
+.input, textarea, select{
+    background: rgba(255,255,255,.06) !important;
+    border:1px solid rgba(255,255,255,.1) !important;
+    border-radius:18px !important;
+    padding:14px !important;
+    color:white !important;
+    font-size:15px !important;
+}
+
+.btn{
+    border-radius:18px !important;
+    padding:14px 18px !important;
+    font-weight:700 !important;
+}
+
+.btn-primary{
+    background: linear-gradient(135deg,#22c55e,#0ea5e9) !important;
+    border:none !important;
+    box-shadow: 0 10px 25px rgba(14,165,233,.25);
+}
+
+.badge{
+    border-radius:999px !important;
+    padding:8px 14px !important;
+    background: rgba(34,197,94,.15) !important;
+    color:#86efac !important;
+}
+
+.stats-grid{
+    display:grid;
+    grid-template-columns: repeat(2,1fr);
+    gap:14px;
+}
+
+.stat-card{
+    background: rgba(255,255,255,.06);
+    border-radius:24px;
+    padding:1rem;
+    border:1px solid rgba(255,255,255,.08);
+}
+
+@media(min-width:900px){
+    .layout{
+        grid-template-columns: 280px 1fr !important;
+    }
+
+    .sidebar{
+        top:0 !important;
+        bottom:auto !important;
+        width:280px !important;
+        height:100vh !important;
+        flex-direction:column !important;
+        justify-content:flex-start;
+    }
+
+    .brand,
+    .sidebar-foot,
+    .nav-title{
+        display:block !important;
+    }
+
+    .nav{
+        flex-direction:column !important;
+    }
+
+    .nav a{
+        flex-direction:row !important;
+    }
+
+    .content{
+        padding-bottom:2rem !important;
+    }
+}
+
+/* ===== PREMIUM LOGIN PAGE ===== */
+.login-premium{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:1.5rem;
+    background:
+      radial-gradient(circle at top right, rgba(34,197,94,.2), transparent 25%),
+      radial-gradient(circle at bottom left, rgba(14,165,233,.2), transparent 25%),
+      #07111f;
+}
+
+.login-box{
+    width:100%;
+    max-width:420px;
+    background: rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:32px;
+    padding:2rem;
+    backdrop-filter: blur(24px);
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+
+.login-logo{
+    width:82px;
+    height:82px;
+    border-radius:26px;
+    margin:auto;
+    margin-bottom:1rem;
+    background: linear-gradient(135deg,#22c55e,#0ea5e9);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2rem;
+    color:white;
+    font-weight:800;
+}
+
+.login-title{
+    text-align:center;
+    font-size:2rem;
+    font-weight:800;
+    color:white;
+    margin-bottom:.5rem;
+}
+
+.login-sub{
+    text-align:center;
+    color:#94a3b8;
+    margin-bottom:1.8rem;
+}
+
+.login-input{
+    width:100%;
+    padding:16px;
+    border-radius:18px;
+    border:1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.06);
+    color:white;
+    margin-bottom:1rem;
+}
+
+.login-btn{
+    width:100%;
+    padding:16px;
+    border:none;
+    border-radius:18px;
+    font-weight:800;
+    background: linear-gradient(135deg,#22c55e,#0ea5e9);
+    color:white;
+    box-shadow: 0 12px 30px rgba(14,165,233,.3);
+}
+
+/* Base styles */
         :root {
             --bg: #0f172a;
             --bg-light: #1a202c;
@@ -580,7 +913,27 @@ def render_page(title, body_tpl, **ctx):
             .layout { display: block; }
             .card { box-shadow: none; border: 1px solid #ddd; background: #fff; }
         }
-      </style>
+      
+/* ===== PATCH RESPONSIVE TAMBAHAN ===== */
+@media (max-width: 600px) {
+    table { display: block !important; width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; white-space: nowrap !important; }
+    .content { padding: 0.75rem !important; padding-bottom: 120px !important; }
+    .card { padding: 1rem !important; margin-bottom: 1rem !important; }
+    .g2, .g3, .g4, .grid { grid-template-columns: 1fr !important; gap: 0.75rem !important; }
+    .toolbar { flex-direction: column !important; align-items: stretch !important; gap: 0.5rem !important; }
+    .toolbar .btn, .toolbar select, .toolbar input { width: 100% !important; max-width: none !important; }
+    .flex, [style*="display:flex"], [style*="display: flex"] { flex-wrap: wrap !important; }
+    .sidebar { height: 70px !important; padding: 0.5rem !important; justify-content: space-around !important; flex-direction: row !important; bottom: 0 !important; top: auto !important; width: 100% !important; position: fixed !important; z-index: 1000 !important; }
+    .nav { flex-direction: row !important; width: 100% !important; justify-content: space-around !important; }
+    .nav a { flex-direction: column !important; font-size: 0.65rem !important; padding: 5px !important; }
+    .nav-title, .sidebar-foot, .brand { display: none !important; }
+}
+
+.risk-badge { padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; }
+@keyframes pulseRisk { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+.risk-merah { animation: pulseRisk 2s infinite; }
+
+</style>
     </head>
     <body class="font-sans antialiased">
       <script>
@@ -605,6 +958,8 @@ def render_page(title, body_tpl, **ctx):
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}">📚 Rekam Medis (History)</a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='patient_new' else '' }}">➕ Input Pasien</a>{% endif %}
             <div class="nav-title">Operasional</div>
+            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('panduan_admin') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_admin' else '' }}">👩‍💻 SOP Admin</a>{% endif %}
+            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='panduan_dokter' else '' }}">👨‍⚕️ SOP Dokter</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('soap_templates_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='soap_templates_page' else '' }}">🧩 Template SOAP</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='sop_page' else '' }}">📋 SOP Klinik</a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('uploads_page') }}" class="flex items-center gap-3 {{ 'active' if request.endpoint=='uploads_page' else '' }}">📁 Hasil USG</a>{% endif %}
@@ -648,6 +1003,195 @@ def render_page(title, body_tpl, **ctx):
     return render_template_string(base, title=title, app_name=APP_NAME, body=body, user=user, now_label=fmt_dt(now()))
 
 
+
+
+@app.route('/appointments')
+@role_required('superadmin','admin','dokter','pasien')
+def appointments():
+    conn = db()
+    rows = conn.execute("""
+        SELECT a.*, p.nama_pasien, p.nomor_rekam_medis
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        ORDER BY a.appointment_date DESC
+    """).fetchall()
+    conn.close()
+
+    body = """
+    <div class="card">
+      <div class="toolbar">
+        <h2>📅 Jadwal Appointment</h2>
+        <a class="btn btn-primary" href="{{ url_for('add_appointment') }}">+ Tambah Appointment</a>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Pasien</th>
+            <th>RM</th>
+            <th>Dokter</th>
+            <th>Tanggal</th>
+            <th>Keluhan</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r['nama_pasien'] }}</td>
+            <td>{{ r['nomor_rekam_medis'] }}</td>
+            <td>{{ r['doctor_name'] or '-' }}</td>
+            <td>{{ fmt_dt(r['appointment_date']) }}</td>
+            <td>{{ r['complaint'] or '-' }}</td>
+            <td><span class="badge">{{ r['status'] }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    """
+    return render_page('Appointments', body, rows=rows, fmt_dt=fmt_dt)
+
+
+@app.route('/appointments/add', methods=['GET', 'POST'])
+@role_required('superadmin', 'admin', 'dokter')
+def add_appointment():
+    conn = db()
+
+    if request.method == 'POST':
+        patient_id = request.form.get('patient_id')
+        doctor_name = request.form.get('doctor_name')
+        appointment_date = request.form.get('appointment_date')
+        complaint = request.form.get('complaint')
+
+        conn.execute("""
+            INSERT INTO appointments
+            (patient_id, doctor_name, appointment_date, complaint)
+            VALUES (?, ?, ?, ?)
+        """, (patient_id, doctor_name, appointment_date, complaint))
+
+        conn.commit()
+        conn.close()
+
+        flash('Appointment berhasil ditambahkan.', 'success')
+        return redirect(url_for('appointments'))
+
+    patients = conn.execute("""
+        SELECT id, nama_pasien, nomor_rekam_medis
+        FROM patients
+        ORDER BY created_at DESC
+    """).fetchall()
+    conn.close()
+
+    body = """
+    <div class="card">
+      <h2>➕ Tambah Appointment</h2>
+
+      <form method="post" class="grid">
+        <div>
+          <label>Pasien</label>
+          <select class="input" name="patient_id" required>
+            <option value="">-- Pilih Pasien --</option>
+            {% for p in patients %}
+            <option value="{{ p['id'] }}">
+              {{ p['nama_pasien'] }} - {{ p['nomor_rekam_medis'] }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label>Nama Dokter</label>
+          <input class="input" name="doctor_name" placeholder="dr. ..." required>
+        </div>
+
+        <div>
+          <label>Tanggal Appointment</label>
+          <input class="input" type="datetime-local" name="appointment_date" required>
+        </div>
+
+        <div>
+          <label>Keluhan</label>
+          <textarea class="input" name="complaint"></textarea>
+        </div>
+
+        <button class="btn btn-primary">💾 Simpan Appointment</button>
+      </form>
+    </div>
+    """
+    return render_page('Tambah Appointment', body, patients=patients)
+
+
+@app.route('/export-patients')
+@role_required('superadmin', 'admin')
+def export_patients():
+    conn = db()
+    rows = conn.execute("""
+        SELECT nama_pasien, nomor_rekam_medis, nomor_hp, alamat, created_at
+        FROM patients
+        ORDER BY created_at DESC
+    """).fetchall()
+    conn.close()
+
+    import csv
+    from io import StringIO
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(['Nama Pasien', 'No RM', 'No HP', 'Alamat', 'Tanggal Input'])
+
+    for r in rows:
+        writer.writerow([
+            r['nama_pasien'],
+            r['nomor_rekam_medis'],
+            r['nomor_hp'],
+            r['alamat'],
+            r['created_at']
+        ])
+
+    mem = io.BytesIO()
+    mem.write(output.getvalue().encode('utf-8-sig'))
+    mem.seek(0)
+
+    return send_file(
+        mem,
+        as_attachment=True,
+        download_name='data_pasien.csv',
+        mimetype='text/csv'
+    )
+
+
+@app.route('/api/dashboard-stats')
+@role_required('superadmin','admin','dokter','pasien')
+def dashboard_stats_api():
+    conn = db()
+
+    total_patients = conn.execute(
+        "SELECT COUNT(*) FROM patients"
+    ).fetchone()[0]
+
+    total_soap = conn.execute(
+        "SELECT COUNT(*) FROM soap_records"
+    ).fetchone()[0]
+
+    total_appointments = conn.execute(
+        "SELECT COUNT(*) FROM appointments"
+    ).fetchone()[0]
+
+    conn.close()
+
+    return {
+        "total_patients": total_patients,
+        "total_soap": total_soap,
+        "total_appointments": total_appointments,
+        "generated_at": now()
+    }
+
+
+
+
 @app.route('/')
 def index():
     if current_user():
@@ -672,37 +1216,59 @@ def login():
             return redirect(request.args.get('next') or url_for('dashboard'))
         log_action('LOGIN_FAILED', 'Gagal login: ' + username)
         flash('Username atau password salah.', 'danger')
+
     body = '''
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0b1120,#162033);padding:20px">
-      <div style="width:100%;max-width:440px;animation:fade .5s ease">
-        <div style="text-align:center;margin-bottom:24px">
-          <div style="width:72px;height:72px;border-radius:24px;background:linear-gradient(135deg,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;font-weight:900;margin:0 auto 16px;box-shadow:0 8px 32px rgba(34,197,94,.3)">USG</div>
-          <h1 style="margin:0;font-size:24px;color:#e5e7eb">{{ app_name }}</h1>
-          <p style="color:#94a3b8;margin:8px 0 0;font-size:14px">Sistem Informasi Klinik USG 4D — Masuk ke akun Anda</p>
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg-light),var(--bg));padding:20px;position:relative;overflow:hidden">
+      <!-- Decorative background elements -->
+      <div style="position:absolute;top:-10%;left:-10%;width:40vw;height:40vw;background:radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%);border-radius:50%"></div>
+      <div style="position:absolute;bottom:-10%;right:-10%;width:40vw;height:40vw;background:radial-gradient(circle, rgba(14,165,233,0.05) 0%, transparent 70%);border-radius:50%"></div>
+      
+      <div style="width:100%;max-width:400px;animation:fade .6s ease;z-index:10">
+        <div style="text-align:center;margin-bottom:2rem">
+          <div style="width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,#22c55e,#0ea5e9);display:flex;align-items:center;justify-content:center;color:#fff;font-size:36px;font-weight:900;margin:0 auto 20px;box-shadow:0 12px 30px rgba(14,165,233,.3);letter-spacing:-1px">USG</div>
+          <h1 style="margin:0;font-size:26px;color:var(--text);font-weight:800;letter-spacing:-0.5px">Klinik Arissa</h1>
+          <p style="color:var(--text-muted);margin:8px 0 0;font-size:14px;font-weight:500">Sistem Informasi Medis Terpadu</p>
         </div>
-        {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div style="margin-bottom:16px">{% for cat,msg in messages %}<div style="padding:12px 16px;border-radius:14px;border:1px solid {% if cat=='success' %}rgba(34,197,94,.4){% elif cat=='danger' %}rgba(239,68,68,.4){% else %}rgba(245,158,11,.4){% endif %};background:rgba(255,255,255,.06);color:#e5e7eb;font-size:14px;margin-bottom:8px">{{ msg }}</div>{% endfor %}</div>{% endif %}{% endwith %}
-        <form method="post" style="background:rgba(255,255,255,.08);border:1px solid rgba(148,163,184,.18);border-radius:24px;padding:28px;backdrop-filter:blur(16px);box-shadow:0 12px 30px rgba(2,6,23,.22)">
-          <div style="margin-bottom:18px">
-            <label style="display:block;font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:8px">Username</label>
-            <input class="input" name="username" required placeholder="Masukkan username" style="width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.05);color:#e5e7eb;outline:none;font-size:15px">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div style="margin-bottom:20px">
+          {% for cat,msg in messages %}
+          <div style="padding:14px 18px;border-radius:16px;border:1px solid {% if cat=='success' %}rgba(34,197,94,.4){% elif cat=='danger' %}rgba(239,68,68,.4){% else %}rgba(245,158,11,.4){% endif %};background:var(--card);color:var(--text);font-size:14px;font-weight:500;box-shadow:var(--shadow);display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">{% if cat=='danger' %}⚠️{% elif cat=='success' %}✅{% else %}ℹ️{% endif %}</span> {{ msg }}
           </div>
-          <div style="margin-bottom:24px">
-            <label style="display:block;font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:8px">Password</label>
-            <input class="input" type="password" name="password" required placeholder="••••••••" style="width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.05);color:#e5e7eb;outline:none;font-size:15px">
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        
+        <form method="post" style="background:var(--card);border:1px solid var(--border);border-radius:28px;padding:32px;backdrop-filter:blur(20px);box-shadow:0 24px 60px rgba(0,0,0,.2)">
+          <div style="margin-bottom:20px">
+            <label style="display:block;font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Username</label>
+            <div style="position:relative">
+              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text-muted)">👤</span>
+              <input class="input" name="username" required placeholder="Masukkan username" style="width:100%;padding:16px 16px 16px 48px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);outline:none;font-size:15px;transition:all 0.3s ease" onfocus="this.style.borderColor='#22c55e';this.style.background='rgba(255,255,255,.06)'" onblur="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,.03)'">
+            </div>
           </div>
-          <button class="btn btn-primary" style="width:100%;padding:14px;border-radius:16px;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#fff;font-weight:700;font-size:16px;border:none;cursor:pointer">🔐 Masuk ke Dashboard</button>
+          
+          <div style="margin-bottom:30px">
+            <label style="display:block;font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Password</label>
+            <div style="position:relative">
+              <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text-muted)">🔒</span>
+              <input class="input" type="password" name="password" required placeholder="••••••••" style="width:100%;padding:16px 16px 16px 48px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);outline:none;font-size:15px;transition:all 0.3s ease" onfocus="this.style.borderColor='#0ea5e9';this.style.background='rgba(255,255,255,.06)'" onblur="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,.03)'">
+            </div>
+          </div>
+          
+          <button class="btn btn-primary" style="width:100%;padding:16px;border-radius:16px;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#fff;font-weight:800;font-size:16px;border:none;cursor:pointer;box-shadow:0 12px 30px rgba(14,165,233,.25);transition:all 0.3s ease" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 15px 35px rgba(14,165,233,.35)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 12px 30px rgba(14,165,233,.25)'">Masuk ke Sistem ➡️</button>
         </form>
-        <div style="margin-top:20px;background:rgba(255,255,255,.06);border:1px solid rgba(148,163,184,.18);border-radius:20px;padding:20px;backdrop-filter:blur(8px)">
-          <div style="font-weight:700;color:#e5e7eb;margin-bottom:10px;font-size:14px">👤 Akun Default</div>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>superadmin</span><span style="color:#22c55e;font-family:monospace">admin123</span></div>
-            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>admin</span><span style="color:#22c55e;font-family:monospace">admin123</span></div>
-            <div style="display:flex;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px;font-size:13px;color:#94a3b8"><span>dokter</span><span style="color:#22c55e;font-family:monospace">dokter123</span></div>
-          </div>
+        
+        <div style="text-align:center;margin-top:30px;color:var(--text-muted);font-size:13px;font-weight:500">
+          &copy; 2026 Klinik Arissa USG 4D
         </div>
       </div>
     </div>
     '''
+
     return render_page('Login', body, app_name=APP_NAME)
 
 
@@ -1088,8 +1654,7 @@ def patient_detail(patient_id):
     <div class="card" style="margin-top:16px">
       <h3 class="flex items-center gap-2"><span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span> Ringkasan Perkembangan Janin</h3>
       <div class="small muted mb-3">Data historis dari kunjungan sebelumnya untuk memantau tren pertumbuhan.</div>
-      <div style="overflow-x:auto">
-        <table class="w-full text-sm">
+      <table class="w-full text-sm">
           <thead class="bg-slate-800/50">
             <tr><th class="p-3">Tanggal</th><th class="p-3">Usia Hamil</th><th class="p-3">DJJ (bpm)</th><th class="p-3">Posisi</th><th class="p-3">Berat (gr)</th></tr>
           </thead>
@@ -1144,8 +1709,7 @@ def patient_history(patient_id):
             <span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span>
             Monitoring Perkembangan Janin (USG)
         </h3>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm border-collapse">
+        <table class="w-full text-sm border-collapse">
                 <thead>
                     <tr class="text-slate-500 bg-slate-800/50 uppercase text-[10px] tracking-widest border-b border-slate-700">
                         <th class="py-3 px-4 text-left">Tgl Periksa</th>
@@ -1192,6 +1756,13 @@ def patient_history(patient_id):
                                 <div>
                                     <div class="text-emerald-400 font-bold">{{ fmt_dt(s['created_at']) }}</div>
                                     <div class="text-[10px] text-slate-500 uppercase tracking-tighter">Pemeriksa: {{ s['doctor_name'] or s['doctor_username'] or '-' }}</div>
+                                    
+{% set risk = hitung_risiko_kehamilan(s['td_sistolik'], s['td_diastolik'], s['detak_jantung_janin']) %}
+<span class="risk-badge {% if risk.status == 'Merah' %}risk-merah{% endif %}" style="background: {{ risk.bg }}; color: {{ risk.color }}; border: 1px solid {{ risk.color }};">
+    {% if risk.status == 'Merah' %} ⚠️ {% elif risk.status == 'Kuning' %} ⚡ {% else %} ✅ {% endif %}
+    {{ risk.label }}
+</span>
+
                                 </div>
                                 <div class="flex gap-2">
                                     {% if s['informed_consent'] %}<span class="badge bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px]">Consent OK</span>{% endif %}
@@ -1338,6 +1909,92 @@ def soap_templates_page():
     <div class="g2 grid"><div class="card no-print"><h3>Tambah Template SOAP Cepat</h3><form method="post" class="grid"><div><label>Judul Template</label><input class="input" name="title" required></div><div><label>Subjective</label><textarea class="textarea" name="subjective"></textarea></div><div><label>Objective</label><textarea class="textarea" name="objective"></textarea></div><div><label>Assessment</label><textarea class="textarea" name="assessment"></textarea></div><div><label>Plan</label><textarea class="textarea" name="plan"></textarea></div><button class="btn btn-primary">💾 Simpan Template</button></form></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar Template SOAP</h3><span class="badge">{{ rows|length }} template</span></div>{% if rows %}{% for r in rows %}<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><strong>{{ r['title'] }}</strong><span class="small muted">{{ r['username'] or '-' }}</span></div><div class="wrap"><strong>S:</strong> {{ r['subjective'] or '-' }}</div><div class="wrap"><strong>O:</strong> {{ r['objective'] or '-' }}</div><div class="wrap"><strong>A:</strong> {{ r['assessment'] or '-' }}</div><div class="wrap"><strong>P:</strong> {{ r['plan'] or '-' }}</div></div>{% endfor %}{% else %}<div class="empty">Belum ada template.</div>{% endif %}</div></div>
     '''
     return render_page('Template SOAP Cepat', body, rows=rows)
+
+
+
+
+@app.route('/panduan/admin')
+@role_required('superadmin', 'admin')
+def panduan_admin():
+    body = '''
+    <div class="hero card mb-6">
+        <div>
+            <h3 class="text-2xl font-bold text-white mb-2">👩‍💻 SOP Panduan Admin</h3>
+            <div class="text-slate-400">Prosedur operasional sistem khusus untuk Admin/Resepsionis.</div>
+        </div>
+    </div>
+    
+    <div class="g2 grid mb-6">
+        <div class="card">
+            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">1. Registrasi & Pendaftaran</h4>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pasien Baru:</strong> Masuk ke menu <b>"Input Pasien"</b>. Isi kelengkapan data diri dan atur status ke <b>"menunggu"</b>.
+                </div>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pasien Lama:</strong> Di menu Input Pasien, cari nama atau RM di kotak pencarian teratas. Jika ketemu, klik untuk auto-fill, dan daftarkan kembali ke antrian hari ini.
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">2. Manajemen Kasir (Billing)</h4>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Input Tagihan:</strong> Setelah diperiksa dokter, gulir ke kotak "Billing" pada detail pasien. Masukkan nama layanan dan nominal harga.
+                </div>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pelunasan:</strong> Setelah dibayar, tekan <b>"LUNAS"</b>. Jangan lupa ubah status antrian pasien tersebut menjadi <b>"selesai"</b> agar hilang dari antrian aktif dokter.
+                </div>
+            </div>
+        </div>
+    </div>
+    '''
+    return render_page('SOP Admin', body)
+
+
+@app.route('/panduan/dokter')
+@role_required('superadmin', 'dokter')
+def panduan_dokter():
+    body = '''
+    <div class="hero card mb-6">
+        <div>
+            <h3 class="text-2xl font-bold text-white mb-2">👨‍⚕️ SOP Panduan Dokter</h3>
+            <div class="text-slate-400">Panduan standar pelayanan medis dan penggunaan fitur USG 4D.</div>
+        </div>
+    </div>
+    
+    <div class="g2 grid mb-6">
+        <div class="card">
+            <h4 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">1. Pemeriksaan SOAP & Deteksi Dini</h4>
+            <div class="space-y-3 text-sm text-slate-300">
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Memanggil Pasien:</strong> Buka menu <b>"Antrian Hari Ini"</b>. Klik "Periksa" untuk masuk ke halaman detail medis pasien.
+                </div>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Pengisian SOAP:</strong> Isi keluhan dan diagnosis. Anda dapat menggunakan <i>Template SOAP Cepat</i> untuk auto-fill standar SOP.
+                </div>
+                <div class="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30">
+                    <strong class="text-amber-400">Wajib Diisi (Algoritma Risiko):</strong> Kolom <b>TD Sistolik/Diastolik</b> dan <b>DJJ</b> harus diisi angka. Sistem akan memunculkan <i>Badge Merah/Kuning/Hijau</i> otomatis mendeteksi bahaya (seperti Preeklampsia).
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h4 class="text-sky-400 font-bold mb-4 flex items-center gap-2">2. Upload Hasil & Kurva Janin</h4>
+            <div class="space-y-3 text-sm text-slate-300">
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Upload Digital:</strong> Pilih file foto/video USG. Klik <b>"Copy Link"</b> dan kirim via WhatsApp ke pasien agar mereka dapat mendownload mandiri.
+                </div>
+                <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <strong class="text-white">Membaca Kurva:</strong> Grafik di bagian atas detail pasien (EBJ & DJJ) membaca riwayat pemeriksaan sebelumnya untuk memantau tren pertumbuhan janin.
+                </div>
+            </div>
+        </div>
+    </div>
+    '''
+    return render_page('SOP Dokter', body)
+
 
 
 @app.route('/sop')
@@ -1513,7 +2170,7 @@ if __name__ == '__main__':
     print('Buka di browser: http://127.0.0.1:{}'.format(port))
     print('=' * 66)
     try:
-        app.run(debug=True, use_reloader=True, host='0.0.0.0', port=port)
+        app.run(debug=False, use_reloader=True, host='0.0.0.0', port=port)
     except OSError as exc:
         print('\nGAGAL menjalankan server di port {}.'.format(port))
         print('Detail error: {}'.format(exc))
