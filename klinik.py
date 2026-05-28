@@ -791,6 +791,18 @@ label  { display: block; font-size: .8rem; color: var(--text-muted); font-weight
   font-family: inherit; font-size: .9rem;
   transition: all .2s ease;
 }
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%237b93b5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  background-size: 1.1rem;
+  padding-right: 2.5rem !important;
+  cursor: pointer;
+}
+.select option { background: var(--bg); color: var(--text); }
 .input:focus, .select:focus, .textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(34,197,94,.18);
@@ -2339,7 +2351,7 @@ def patient_detail(patient_id):
         if action == 'save_soap' and user['role'] in ('superadmin','admin','dokter'):
             vals = [request.form.get(k,'').strip() for k in ['subjective','objective','assessment','plan','kode_icd10','td_sistolik','td_diastolik','nadi','suhu','rr','usia_kehamilan','detak_jantung_janin','posisi_janin','estimasi_berat_janin','catatan_dokter','rekomendasi_kontrol_ulang']]
             ic = 1 if request.form.get('informed_consent') == 'on' else 0
-            cur.execute('''INSERT INTO soap_records (patient_id,doctor_id,subjective,objective,assessment,plan,kode_icd10,td_sistolik,td_diastolik,nadi,suhu,rr,informed_consent,usia_kehamilan,detak_jantung_janin,posisi_janin,estimasi_berat_janin,catatan_dokter,rekomendasi_kontrol_ulang,created_at,updated_at)
+            cur.execute('''INSERT INTO soap_records (patient_id,doctor_id,subjective,objective,assessment,plan,kode_icd10,td_sistolik,td_diastolik,nadi,suhu,rr,usia_kehamilan,detak_jantung_janin,posisi_janin,estimasi_berat_janin,catatan_dokter,rekomendasi_kontrol_ulang,informed_consent,created_at,updated_at)
                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (patient_id, user['id'], *vals, ic, now(), now()))
             if patient['status_antrian'] != 'selesai':
                 cur.execute("UPDATE patients SET status_antrian='diperiksa', updated_at=? WHERE id=?", (now(), patient_id))
@@ -2380,7 +2392,7 @@ def patient_detail(patient_id):
     <div class="space-y-4">
       <!-- Header Pasien -->
       <div class="card p-6 bg-gradient-to-br from-slate-800/40 to-slate-900/40">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <div>
             <div class="flex items-center gap-3 mb-1">
               <h2 class="text-2xl font-black text-white">{{ patient['nama_pasien'] }}</h2>
@@ -2402,8 +2414,8 @@ def patient_detail(patient_id):
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-white/5 text-xs">
           <div><span class="text-slate-500 block mb-1">UMUR / TTL</span><span class="text-slate-200 font-bold">{{ patient['umur'] or '-' }} / {{ patient['tanggal_lahir'] or '-' }}</span></div>
-          <div><span class="text-slate-500 block mb-1">LAYANAN / GOLDA</span><span class="text-slate-200 font-bold">{{ patient['jenis_layanan'] or '-' }} / {{ patient['golongan_darah'] or '-' }}</span></div>
-          <div><span class="text-slate-500 block mb-1">KELUARGA</span><span class="text-slate-200 font-bold">{{ patient['nama_keluarga'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">LAYANAN / GOLDAR</span><span class="text-slate-200 font-bold">{{ patient['jenis_layanan'] or '-' }} / {{ patient['golongan_darah'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">NAMA KELUARGA</span><span class="text-slate-200 font-bold">{{ patient['nama_keluarga'] or '-' }}</span></div>
           <div><span class="text-slate-500 block mb-1">DOKTER TUJUAN</span><span class="text-slate-200 font-bold text-sky-400">{{ patient['dokter_tujuan'] or '-' }}</span></div>
         </div>
       </div>
@@ -2438,10 +2450,12 @@ def patient_detail(patient_id):
                 <div class="space-y-3">
                   <div><label>Assessment (Diagnosis)</label><textarea id="assessment" class="textarea h-24" name="assessment" placeholder="Diagnosis / ICD-10..."></textarea></div>
                   <div><label>Plan (Rencana / Terapi)</label><textarea id="plan" class="textarea h-24" name="plan" placeholder="Rencana tindak lanjut..."></textarea></div>
-                  <div class="grid grid-cols-2 gap-2">
+                  <div class="grid grid-cols-3 gap-2">
                     <div><label class="text-[10px]">USIA HAMIL</label><input class="input py-1 text-center" name="usia_kehamilan" placeholder="28w"></div>
+                    <div><label class="text-[10px]">POSISI JANIN</label><input class="input py-1 text-center" name="posisi_janin" placeholder="Kepala"></div>
                     <div><label class="text-[10px]">EBJ (Gram)</label><input class="input py-1 text-center font-bold text-emerald-400" name="estimasi_berat_janin" placeholder="1200"></div>
                   </div>
+                  <div><label>Rekomendasi Kontrol</label><input class="input py-1" name="rekomendasi_kontrol_ulang" placeholder="Contoh: 2 minggu lagi"></div>
                 </div>
               </div>
               <div class="p-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center">
@@ -2572,149 +2586,198 @@ def patient_history(patient_id):
     cur.execute('SELECT * FROM uploads WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); files = cur.fetchall()
     cur.execute('SELECT * FROM billing WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); bills = cur.fetchall(); conn.close()
     body = '''
-    <div class="hero card mb-6">
-        <div>
-            <h3 class="text-2xl font-bold text-white mb-1">Riwayat Pasien: {{ patient['nama_pasien'] }}</h3>
-            <div class="text-slate-400 font-medium">No RM: {{ patient['nomor_rekam_medis'] }} • Resume Kunjungan Periodik</div>
+    <div class="space-y-6">
+      <!-- Header Resume Pasien -->
+      <div class="card p-6 bg-gradient-to-r from-slate-800/50 to-slate-900/50 border-white/10">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h3 class="text-3xl font-black text-white mb-1">Riwayat: {{ patient['nama_pasien'] }}</h3>
+            <p class="text-slate-400 font-medium">No RM: <span class="text-emerald-400 font-mono">{{ patient['nomor_rekam_medis'] }}</span> • Resume Kunjungan Periodik</p>
+          </div>
+          <div class="toolbar no-print">
+            <a class="btn bg-slate-700 hover:bg-slate-600 text-white" href="{{ url_for('patient_detail', patient_id=patient['id']) }}">⬅️ Kembali ke Detail</a>
+          </div>
         </div>
-        <div class="toolbar no-print">
-            <a class="btn bg-slate-700 hover:bg-slate-600 text-white" href="{{ url_for('patient_detail', patient_id=patient['id']) }}">⬅️ Detail Pasien</a>
+        
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Total Kunjungan</div>
+            <div class="text-2xl font-black text-emerald-400">{{ soaps|length }}</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Dokumen Digital</div>
+            <div class="text-2xl font-black text-sky-400">{{ files|length }}</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Transaksi</div>
+            <div class="text-2xl font-black text-amber-400">{{ bills|length }}</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Status</div>
+            <div class="text-lg font-bold"><span class="pill {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span></div>
+          </div>
         </div>
-    </div>
+      </div>
 
-    <div class="g3 grid mb-6">
-        <div class="stat"><div class="small muted">Kunjungan (SOAP)</div><div class="text-3xl font-black text-emerald-400">{{ soaps|length }}</div></div>
-        <div class="stat"><div class="small muted">Dokumen Digital</div><div class="text-3xl font-black text-blue-400">{{ files|length }}</div></div>
-        <div class="stat"><div class="small muted">Transaksi Terlampir</div><div class="text-3xl font-black text-amber-400">{{ bills|length }}</div></div>
-    </div>
-
-    <!-- Growth Monitoring Chart Table -->
-    <div class="card mb-6 overflow-hidden">
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span>
+      <!-- Monitoring Perkembangan -->
+      <div class="card overflow-hidden">
+        <div class="p-6 border-b border-white/5 bg-white/5">
+          <h3 class="text-lg font-bold m-0 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
             Monitoring Perkembangan Janin (USG)
-        </h3>
-        <table class="w-full text-sm border-collapse">
-                <thead>
-                    <tr class="text-slate-500 bg-slate-800/50 uppercase text-[10px] tracking-widest border-b border-slate-700">
-                        <th class="py-3 px-4 text-left">Tgl Periksa</th>
-                        <th class="py-3 px-4 text-left">Usia Hamil</th>
-                        <th class="py-3 px-4 text-left">DJJ (bpm)</th>
-                        <th class="py-3 px-4 text-left">Posisi Janin</th>
-                        <th class="py-3 px-4 text-left">Berat (gr)</th>
-                        <th class="py-3 px-4 text-left">Tekanan Darah</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-800 text-slate-300">
-                    {% if soaps %}
-                        {% for s in soaps|reverse %}
-                        <tr class="hover:bg-slate-800/30 transition-colors">
-                            <td class="py-3 px-4 whitespace-nowrap">{{ fmt_dt(s['created_at']).split(' ')[0] }}</td>
-                            <td class="py-3 px-4 font-bold text-white">{{ s['usia_kehamilan'] or '-' }}</td>
-                            <td class="py-3 px-4">{{ s['detak_jantung_janin'] or '-' }}</td>
-                            <td class="py-3 px-4 uppercase text-[11px]">{{ s['posisi_janin'] or '-' }}</td>
-                            <td class="py-3 px-4 font-mono text-emerald-400 font-bold">{{ s['estimasi_berat_janin'] or '-' }}</td>
-                            <td class="py-3 px-4 text-xs">{{ s['td_sistolik'] or '-' }}/{{ s['td_diastolik'] or '-' }}</td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr><td colspan="6" class="py-6 text-center text-slate-500 italic">Data rekam medis belum tersedia.</td></tr>
-                    {% endif %}
-                </tbody>
-            </table>
+          </h3>
         </div>
-    </div>
+        <div class="table-wrap">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-white/5 text-slate-400 uppercase text-[10px] tracking-widest border-b border-white/10">
+                <th class="px-6 py-4">Tgl Periksa</th>
+                <th class="px-6 py-4">Usia Hamil</th>
+                <th class="px-6 py-4">DJJ (bpm)</th>
+                <th class="px-6 py-4 text-center">Posisi</th>
+                <th class="px-6 py-4">Berat (gr)</th>
+                <th class="px-6 py-4">Tensi</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              {% if soaps %}
+                {% for s in soaps %}
+                <tr class="hover:bg-white/5 transition-colors">
+                  <td class="px-6 py-4 text-slate-400">{{ fmt_dt(s['created_at']).split(' ')[0] }}</td>
+                  <td class="px-6 py-4 font-bold text-white">{{ s['usia_kehamilan'] or '-' }}</td>
+                  <td class="px-6 py-4 text-sky-400 font-bold">{{ s['detak_jantung_janin'] or '-' }}</td>
+                  <td class="px-6 py-4 text-center"><span class="badge">{{ s['posisi_janin'] or '-' }}</span></td>
+                  <td class="px-6 py-4 font-mono font-bold text-emerald-400">{{ s['estimasi_berat_janin'] or '-' }}</td>
+                  <td class="px-6 py-4 text-xs">{{ s['td_sistolik'] or '-' }}/{{ s['td_diastolik'] or '-' }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="6" class="py-12 text-center text-slate-500 italic">Data rekam medis belum tersedia.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Timeline Content -->
-        <div class="lg:col-span-2 space-y-6">
-            <h3 class="text-lg font-bold text-white px-2">Timeline Kunjungan</h3>
-            <div class="space-y-4">
-                {% if soaps %}
-                    {% for s in soaps %}
-                    <div class="relative pl-8 border-l-2 border-slate-800 pb-2">
-                        <!-- Timeline Indicator -->
-                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-emerald-500 border-4 border-slate-900"></div>
-                        
-                        <div class="card bg-slate-800/20 hover:bg-slate-800/40 transition-all p-5">
-                            <div class="flex justify-between items-start mb-4 border-b border-slate-700/50 pb-3">
-                                <div>
-                                    <div class="text-emerald-400 font-bold">{{ fmt_dt(s['created_at']) }}</div>
-                                    <div class="text-[10px] text-slate-500 uppercase tracking-tighter">Pemeriksa: {{ s['doctor_name'] or s['doctor_username'] or '-' }}</div>
-                                    
-{% set risk = hitung_risiko_kehamilan(s['td_sistolik'], s['td_diastolik'], s['detak_jantung_janin']) %}
-<span class="risk-badge {% if risk.status == 'Merah' %}risk-merah{% endif %}" style="background: {{ risk.bg }}; color: {{ risk.color }}; border: 1px solid {{ risk.color }};">
-    {% if risk.status == 'Merah' %} ⚠️ {% elif risk.status == 'Kuning' %} ⚡ {% else %} ✅ {% endif %}
-    {{ risk.label }}
-</span>
-
-                                </div>
-                                <div class="flex gap-2">
-                                    {% if s['informed_consent'] %}<span class="badge bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px]">Consent OK</span>{% endif %}
-                                    <span class="badge bg-slate-700 text-slate-300 text-[10px]">{{ s['kode_icd10'] or 'ICD-10' }}</span>
-                                </div>
-                            </div>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs leading-relaxed">
-                                <div><span class="text-slate-500 font-bold block mb-1">SUBJECTIVE</span><div class="wrap text-slate-300">{{ s['subjective'] or '-' }}</div></div>
-                                <div><span class="text-slate-500 font-bold block mb-1">OBJECTIVE</span><div class="wrap text-slate-300">{{ s['objective'] or '-' }}</div></div>
-                                <div class="md:col-span-2 mt-2 pt-2 border-t border-slate-700/30"><span class="text-slate-500 font-bold block mb-1">ASSESSMENT & DIAGNOSIS</span><div class="wrap text-white font-semibold text-sm">{{ s['assessment'] or '-' }}</div></div>
-                                <div class="md:col-span-2 mt-1"><span class="text-slate-500 font-bold block mb-1">PLAN & EDUKASI</span><div class="wrap text-emerald-100 italic bg-emerald-900/10 p-2 rounded">{{ s['plan'] or '-' }}</div></div>
-                            </div>
-                        </div>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- Timeline Kunjungan -->
+        <div class="lg:col-span-8 space-y-6">
+          <h3 class="text-xl font-bold px-2 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-cyan-500 rounded-full"></span>
+            Timeline Pemeriksaan (SOAP)
+          </h3>
+          <div class="space-y-6">
+            {% if soaps %}
+              {% for s in soaps %}
+              <div class="relative pl-10 border-l-2 border-slate-800 pb-2">
+                <!-- Timeline Indicator -->
+                <div class="absolute -left-[11px] top-0 w-5 h-5 rounded-full bg-slate-900 border-4 border-emerald-500 z-10"></div>
+                
+                <div class="card p-6 bg-white/5 hover:bg-white/10 transition-all">
+                  <div class="flex flex-col md:flex-row justify-between items-start gap-4 mb-4 border-b border-white/5 pb-4">
+                    <div class="flex-1">
+                      <div class="text-lg font-bold text-emerald-400 mb-1">{{ fmt_dt(s['created_at']) }}</div>
+                      <div class="text-xs text-slate-500 font-bold uppercase tracking-wider">Dokter: {{ s['doctor_name'] or s['doctor_username'] or '-' }}</div>
+                      
+                      <div class="mt-3">
+                        {% set risk = hitung_risiko_kehamilan(s['td_sistolik'], s['td_diastolik'], s['detak_jantung_janin']) %}
+                        <span class="risk-badge {% if risk.status == 'Merah' %}risk-merah{% endif %}" style="background: {{ risk.bg }}; color: {{ risk.color }}; border: 1px solid {{ risk.color }};">
+                          {{ '⚠️' if risk.status == 'Merah' else '⚡' if risk.status == 'Kuning' else '✅' }} {{ risk.label }}
+                        </span>
+                      </div>
                     </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="empty py-10">Belum ada riwayat SOAP.</div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Side Panel -->
-        <div class="space-y-6">
-            <div class="card">
-                <h4 class="text-white font-bold mb-4 flex items-center gap-2">🎞️ Galeri Hasil USG</h4>
-                {% if files %}
-                <div class="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-2">
-                    {% for f in files %}
-                    <a href="{{ url_for('file_view_auth', upload_id=f['id']) }}" target="_blank" class="flex items-center gap-3 p-3 rounded-xl bg-slate-900/50 border border-slate-700 hover:border-emerald-500 transition-all group">
-                        <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
-                            {% if f['file_ext'] in ['jpg','jpeg','png'] %}🖼️{% elif f['file_ext']=='pdf' %}📄{% else %}🎞️{% endif %}
-                        </div>
-                        <div class="overflow-hidden">
-                            <div class="text-[11px] text-slate-200 font-bold truncate">{{ f['original_filename'] }}</div>
-                            <div class="text-[9px] text-slate-500">{{ fmt_dt(f['created_at']) }}</div>
-                        </div>
-                    </a>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="text-center py-6 text-slate-500 text-xs italic">Tidak ada file.</div>
-                {% endif %}
-            </div>
-
-            <div class="card">
-                <h4 class="text-white font-bold mb-4">💳 Riwayat Pembayaran</h4>
-                {% if bills %}
-                <div class="space-y-3">
-                    {% for b in bills %}
-                    <div class="p-3 rounded-xl bg-slate-900/50 border border-slate-700">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="text-[11px] text-slate-300 font-bold">{{ b['item_name'] }}</span>
-                            <span class="text-[10px] font-black {{ 'text-emerald-400' if b['status_bayar']=='lunas' else 'text-red-400' }} uppercase">{{ b['status_bayar'] }}</span>
-                        </div>
-                        <div class="flex justify-between items-end">
-                            <span class="text-[9px] text-slate-500">{{ fmt_dt(b['created_at']).split(' ')[0] }}</span>
-                            <span class="text-sm font-mono text-white">{{ rupiah(b['amount']) }}</span>
-                        </div>
+                    <div class="flex gap-2">
+                      {% if s['informed_consent'] %}<span class="badge bg-emerald-500/10 text-emerald-400 border-emerald-500/30">Informed Consent</span>{% endif %}
+                      <span class="badge bg-slate-800 text-slate-300 font-mono">{{ s['kode_icd10'] or 'ICD-10' }}</span>
                     </div>
-                    {% endfor %}
+                  </div>
+                  
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                    <div class="space-y-2">
+                      <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Subjective</span>
+                      <div class="wrap text-slate-300">{{ s['subjective'] or '-' }}</div>
+                    </div>
+                    <div class="space-y-2">
+                      <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Objective</span>
+                      <div class="wrap text-slate-300">{{ s['objective'] or '-' }}</div>
+                    </div>
+                    <div class="md:col-span-2 pt-4 border-t border-white/5">
+                      <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Assessment & Plan</span>
+                      <div class="mt-2 p-4 rounded-2xl bg-black/20 border border-white/5">
+                        <div class="wrap text-white font-bold text-base mb-2">Diagnosis: {{ s['assessment'] or '-' }}</div>
+                        <div class="wrap text-emerald-200 italic">Terapi: {{ s['plan'] or '-' }}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                {% else %}
-                <div class="text-center py-6 text-slate-500 text-xs italic">Belum ada billing.</div>
-                {% endif %}
-            </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="empty py-16 card bg-white/5 border-dashed">
+                <div class="text-4xl mb-2">📭</div>
+                <div class="text-slate-500 font-medium">Belum ada riwayat pemeriksaan medis (SOAP).</div>
+              </div>
+            {% endif %}
+          </div>
         </div>
+
+        <!-- Sidebar Hasil Digital -->
+        <div class="lg:col-span-4 space-y-6">
+          <!-- Galeri -->
+          <div class="card p-0 overflow-hidden">
+            <div class="p-5 border-b border-white/5 bg-white/5 flex justify-between items-center">
+              <h4 class="text-white font-bold m-0 flex items-center gap-2">🎞️ Galeri USG</h4>
+              <span class="badge bg-emerald-500/10 text-emerald-400">{{ files|length }}</span>
+            </div>
+            <div class="p-4">
+              {% if files %}
+              <div class="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                {% for f in files %}
+                <a href="{{ url_for('file_view_auth', upload_id=f['id']) }}" target="_blank" class="flex items-center gap-3 p-3 rounded-2xl bg-slate-800/40 border border-white/5 hover:border-emerald-500/50 transition-all group">
+                  <div class="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                    {% if f['file_ext'] in ['jpg','jpeg','png'] %}🖼️{% elif f['file_ext']=='pdf' %}📄{% else %}🎞️{% endif %}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-xs text-white font-bold truncate">{{ f['original_filename'] }}</div>
+                    <div class="text-[10px] text-slate-500 mt-0.5">{{ fmt_dt(f['created_at']) }}</div>
+                  </div>
+                </a>
+                {% endfor %}
+              </div>
+              {% else %}
+              <div class="text-center py-10 text-slate-500 text-xs italic">Belum ada dokumen yang di-upload.</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Billing -->
+          <div class="card p-0 overflow-hidden">
+            <div class="p-5 border-b border-white/5 bg-white/5">
+              <h4 class="text-white font-bold m-0 flex items-center gap-2">💳 Tagihan Pasien</h4>
+            </div>
+            <div class="p-4">
+              {% if bills %}
+              <div class="space-y-3">
+                {% for b in bills %}
+                <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs text-slate-200 font-bold">{{ b['item_name'] }}</span>
+                    <span class="pill {{ 'selesai' if b['status_bayar']=='lunas' else 'unpaid' }}">{{ b['status_bayar'] }}</span>
+                  </div>
+                  <div class="flex justify-between items-end">
+                    <span class="text-[10px] text-slate-500">{{ fmt_dt(b['created_at']).split(' ')[0] }}</span>
+                    <span class="text-lg font-black text-white">{{ rupiah(b['amount']) }}</span>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% else %}
+              <div class="text-center py-10 text-slate-500 text-xs italic">Belum ada rincian tagihan.</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     '''
     return render_page('Riwayat Pemeriksaan Pasien', body, patient=patient, soaps=soaps, files=files, bills=bills, fmt_dt=fmt_dt, rupiah=rupiah, file_badge=file_badge)
