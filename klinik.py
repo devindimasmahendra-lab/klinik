@@ -28,7 +28,7 @@ import uuid
 import base64
 import shutil
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from functools import wraps
 from typing import Optional
 
@@ -1721,102 +1721,253 @@ def dashboard():
     cur.execute("SELECT COUNT(*) FROM patients WHERE status_antrian='diperiksa'"); checked = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM patients WHERE status_antrian='selesai'"); finished = cur.fetchone()[0]
     cur.execute('SELECT COUNT(*) FROM uploads'); total_uploads = cur.fetchone()[0]
+
+    # Chart Data: Kunjungan 7 Hari Terakhir
+    cur.execute('''
+        SELECT date(created_at) as d, COUNT(*) as c 
+        FROM patients 
+        WHERE created_at >= date('now', '-6 days') 
+        GROUP BY d 
+        ORDER BY d ASC
+    ''')
+    daily_rows = cur.fetchall()
+    daily_labels = []
+    daily_values = []
+    for i in range(6, -1, -1):
+        d = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
+        daily_labels.append(d)
+        val = 0
+        for r in daily_rows:
+            if r['d'] == d:
+                val = r['c']
+                break
+        daily_values.append(val)
+
     if user['role'] == 'dokter':
         cur.execute("SELECT * FROM patients WHERE status_antrian IN ('menunggu','diperiksa') ORDER BY created_at ASC LIMIT 10")
     else:
         cur.execute('SELECT * FROM patients ORDER BY created_at DESC LIMIT 8')
     patients_rows = cur.fetchall()
     cur.execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8'); audits = cur.fetchall(); conn.close()
-    body = '''
-    <div class="hero card">
-      <div>
-        <h3 style="margin:0">Selamat datang, {{ user['full_name'] or user['username'] }}</h3>
-        <div class="muted">Dashboard ringkas fokus admin dan dokter.</div>
+
+    body = r'''
+    <div class="space-y-6">
+      <!-- Welcome Banner -->
+      <div class="card p-6 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border-emerald-500/30">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h1 class="text-3xl font-black text-white">Dashboard Command Center</h1>
+            <p class="text-slate-400 font-medium">Halo, {{ user['full_name'] or user['username'] }}. Pantau operasional klinik secara real-time.</p>
+          </div>
+          <div class="flex gap-3 no-print">
+            {% if user['role'] in ['superadmin','admin'] %}
+            <a class="btn btn-primary shadow-lg shadow-emerald-500/20" href="{{ url_for('patient_new') }}">
+              <span class="text-lg">➕</span> Input Pasien Baru
+            </a>
+            {% endif %}
+            <a class="btn bg-slate-800 border-slate-700 hover:bg-slate-700" href="{{ url_for('antrian') }}">
+              <span class="text-lg">🚶</span> Cek Antrian
+            </a>
+          </div>
+        </div>
       </div>
-      <div class="toolbar no-print">
-        {% if user['role'] in ['superadmin','admin'] %}
-        <a class="btn btn-primary" href="{{ url_for('patient_new') }}">➕ Input Pasien Baru</a>
-        {% endif %}
-        <a class="btn" href="{{ url_for('patients') }}">📋 Lihat Pasien</a>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stat group hover:scale-[1.02] transition-transform">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Pasien Baru Hari Ini</div>
+              <div class="text-4xl font-black text-emerald-400">{{ total_today }}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500">📈</div>
+          </div>
+        </div>
+        <div class="stat group hover:scale-[1.02] transition-transform border-amber-500/20">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Menunggu Antrian</div>
+              <div class="text-4xl font-black text-amber-400">{{ waiting }}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-amber-500/10 text-amber-500">⏳</div>
+          </div>
+        </div>
+        <div class="stat group hover:scale-[1.02] transition-transform border-cyan-500/20">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Sedang Diperiksa</div>
+              <div class="text-4xl font-black text-cyan-400">{{ checked }}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">👨‍⚕️</div>
+          </div>
+        </div>
+        <div class="stat group hover:scale-[1.02] transition-transform border-blue-500/20">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Selesai Dilayani</div>
+              <div class="text-4xl font-black text-blue-400">{{ finished }}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-blue-500/10 text-blue-500">✅</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 card p-6">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
+            Tren Kunjungan 7 Hari Terakhir
+          </h3>
+          <div class="h-[300px]">
+            <canvas id="visitTrendChart"></canvas>
+          </div>
+        </div>
+        <div class="card p-6">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-cyan-500 rounded-full"></span>
+            Status Antrian Saat Ini
+          </h3>
+          <div class="h-[300px] flex items-center justify-center">
+            <canvas id="statusPieChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lists Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-0 overflow-hidden">
+          <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+            <h3 class="text-lg font-bold m-0">📋 Antrian Aktif / Pasien Terbaru</h3>
+            <a href="{{ url_for('patients') }}" class="text-xs font-bold text-emerald-400 hover:underline">Lihat Semua →</a>
+          </div>
+          <div class="table-wrap">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-white/5 text-slate-400 uppercase text-[10px] tracking-widest">
+                  <th class="px-6 py-3 text-left">Pasien</th>
+                  <th class="px-6 py-3 text-left">RM</th>
+                  <th class="px-6 py-3 text-center">Status</th>
+                  <th class="px-6 py-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/5">
+                {% for p in patients_rows %}
+                <tr class="hover:bg-white/5 transition-colors">
+                  <td class="px-6 py-4">
+                    <div class="font-bold text-white">{{ p['nama_pasien'] }}</div>
+                    <div class="text-[10px] text-slate-500">{{ fmt_dt(p['created_at']) }}</div>
+                  </td>
+                  <td class="px-6 py-4 font-mono text-xs text-slate-300">{{ p['nomor_rekam_medis'] }}</td>
+                  <td class="px-6 py-4 text-center">
+                    <span class="pill {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span>
+                  </td>
+                  <td class="px-6 py-4 text-right">
+                    <a class="btn btn-sm bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Periksa</a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if not patients_rows %}
+          <div class="p-12 text-center text-slate-500 italic">Belum ada pasien terdaftar.</div>
+          {% endif %}
+        </div>
+
+        <div class="card p-0 overflow-hidden">
+          <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+            <h3 class="text-lg font-bold m-0">🕵️ Audit Log Aktivitas</h3>
+            <a href="{{ url_for('audit_logs_page') }}" class="text-xs font-bold text-slate-400 hover:underline">Semua Log →</a>
+          </div>
+          <div class="table-wrap">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-white/5 text-slate-400 uppercase text-[10px] tracking-widest">
+                  <th class="px-6 py-3 text-left">Waktu</th>
+                  <th class="px-6 py-3 text-left">User</th>
+                  <th class="px-6 py-3 text-left">Aksi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/5">
+                {% for a in audits %}
+                <tr class="hover:bg-white/5 transition-colors">
+                  <td class="px-6 py-4 text-xs text-slate-400">{{ fmt_dt(a['created_at']) }}</td>
+                  <td class="px-6 py-4 font-bold text-white">{{ a['username'] or '-' }}</td>
+                  <td class="px-6 py-4">
+                    <div class="font-medium text-slate-200">{{ a['action'] }}</div>
+                    <div class="text-[10px] text-slate-500 truncate max-w-[150px]">{{ a['details'] or '' }}</div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if not audits %}
+          <div class="p-12 text-center text-slate-500 italic">Belum ada log aktivitas.</div>
+          {% endif %}
+        </div>
       </div>
     </div>
 
-    <div class="g4 grid" style="margin-top:16px">
-      <div class="stat">
-        <div class="muted small">Total pasien hari ini</div>
-        <div style="font-size:30px;font-weight:800">{{ total_today }}</div>
-      </div>
-      <div class="stat">
-        <div class="muted small">Pasien menunggu</div>
-        <div style="font-size:30px;font-weight:800">{{ waiting }}</div>
-      </div>
-      <div class="stat">
-        <div class="muted small">Sedang diperiksa</div>
-        <div style="font-size:30px;font-weight:800">{{ checked }}</div>
-      </div>
-      <div class="stat">
-        <div class="muted small">Pasien selesai</div>
-        <div style="font-size:30px;font-weight:800">{{ finished }}</div>
-      </div>
-    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // Visit Trend Chart
+        const ctxVisit = document.getElementById('visitTrendChart').getContext('2d');
+        new Chart(ctxVisit, {
+          type: 'line',
+          data: {
+            labels: {{ daily_labels|tojson }},
+            labels: {{ daily_labels|tojson }},
+            datasets: [{
+              label: 'Pasien Baru',
+              data: {{ daily_values|tojson }},
+              borderColor: '#22c55e',
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              borderWidth: 3,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 4,
+              pointBackgroundColor: '#22c55e'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7b93b5' } },
+              x: { grid: { display: false }, ticks: { color: '#7b93b5' } }
+            }
+          }
+        });
 
-    <div class="g2 grid" style="margin-top:16px">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-          <h3 style="margin:0">Pasien Terbaru / Antrian</h3>
-          <span class="badge">Upload: {{ total_uploads }}</span>
-        </div>
-        {% if patients_rows %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Pasien</th><th>RM</th><th>Status</th><th>Dokter</th><th>Aksi</th></tr>
-            </thead>
-            <tbody>
-              {% for p in patients_rows %}
-              <tr>
-                <td><strong>{{ p['nama_pasien'] }}</strong><div class="small muted">{{ fmt_dt(p['created_at']) }}</div></td>
-                <td>{{ p['nomor_rekam_medis'] }}</td>
-                <td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td>
-                <td>{{ p['dokter_tujuan'] or '-' }}</td>
-                <td><a class="btn btn-sm" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Buka</a></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="empty">Belum ada pasien.</div>
-        {% endif %}
-      </div>
-
-      <div class="card">
-        <h3>Audit Terbaru</h3>
-        {% if audits %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Waktu</th><th>User</th><th>Aksi</th></tr>
-            </thead>
-            <tbody>
-              {% for a in audits %}
-              <tr>
-                <td>{{ fmt_dt(a['created_at']) }}</td>
-                <td>{{ a['username'] or '-' }}</td>
-                <td><strong>{{ a['action'] }}</strong><div class="small muted">{{ a['details'] or '' }}</div></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <div class="empty">Belum ada audit.</div>
-        {% endif %}
-      </div>
-    </div>
+        // Status Pie Chart
+        const ctxStatus = document.getElementById('statusPieChart').getContext('2d');
+        new Chart(ctxStatus, {
+          type: 'doughnut',
+          data: {
+            labels: ['Menunggu', 'Diperiksa', 'Selesai'],
+            datasets: [{
+              data: [{{ waiting }}, {{ checked }}, {{ finished }}],
+              backgroundColor: ['#f59e0b', '#0ea5e9', '#22c55e'],
+              borderWidth: 0,
+              hoverOffset: 10
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+              legend: { position: 'bottom', labels: { color: '#7b93b5', usePointStyle: true, padding: 20 } }
+            }
+          }
+        });
+      });
+    </script>
     '''
-    return render_page('Dashboard', body, total_today=total_today, waiting=waiting, checked=checked, finished=finished, total_uploads=total_uploads, patients_rows=patients_rows, audits=audits, fmt_dt=fmt_dt)
-
+    return render_page('Dashboard', body, total_today=total_today, waiting=waiting, checked=checked, finished=finished, total_uploads=total_uploads, patients_rows=patients_rows, audits=audits, fmt_dt=fmt_dt, daily_labels=daily_labels, daily_values=daily_values)
 
 @app.route('/antrian')
 @role_required('superadmin', 'admin', 'dokter')
