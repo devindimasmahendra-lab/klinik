@@ -438,6 +438,18 @@ def api_fetal_growth(patient_id):
     return {'labels': labels, 'djj': djj_data, 'ebj': ebj_data}
 
 
+@app.route('/api/master_options')
+def api_master_options():
+    conn = db(); cur = conn.cursor()
+    cur.execute('SELECT category, options_text FROM master_options')
+    rows = cur.fetchall(); conn.close()
+    result = {}
+    for r in rows:
+        opts = [o.strip() for o in (r['options_text'] or '').split(',') if o.strip()]
+        result[r['category']] = opts
+    return result
+
+
 @app.route('/api/patient_visits/<int:patient_id>')
 @role_required('superadmin', 'admin')
 def api_patient_visits(patient_id):
@@ -1886,6 +1898,16 @@ def patients():
 def patient_new():
     conn = db(); cur = conn.cursor()
     cur.execute("SELECT full_name,username FROM users WHERE role='dokter' AND active=1 ORDER BY full_name,username"); doctors = cur.fetchall()
+    # Load master options untuk dropdown
+    cur.execute('SELECT category, options_text FROM master_options')
+    master_rows = cur.fetchall()
+    master_opts = {}
+    for r in master_rows:
+        opts = [o.strip() for o in (r['options_text'] or '').split(',') if o.strip()]
+        master_opts[r['category']] = opts
+    goldar_opts = master_opts.get('golongan_darah', ['A','B','AB','O'])
+    layanan_opts = master_opts.get('jenis_layanan', ['Umum','BPJS','Asuransi'])
+    pekerjaan_opts = master_opts.get('pekerjaan', ['Karyawan','Wiraswasta','PNS','Pelajar','Mahasiswa','Ibu Rumah Tangga'])
     edit_id = request.args.get('edit', type=int)
     edit_patient = None
     if edit_id:
@@ -1930,7 +1952,7 @@ def patient_new():
       </div>
       <div style="position:relative;margin-top:12px">
         <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="position:absolute;top:100%;left:0;right:0;max-height:300px;overflow-y:auto;background:var(--card2);border:1px solid var(--border);border-radius:16px;z-index:100;display:none"></div>
+        <div id="searchResults" style="position:absolute;top:100%;left:0;right:0;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;z-index:1000;display:none;box-shadow:var(--shadow)"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,.1)"></div>
     </div>
@@ -1954,13 +1976,50 @@ def patient_new():
           </div>
           <div><label>Umur (otomatis dari TTL)</label><input class="input" name="umur" id="fumur" value="{{ edit_patient['umur'] if edit_patient else '' }}" readonly placeholder="Terisi otomatis"></div>
           <div><label>Nomor HP</label><input class="input" name="nomor_hp" id="fhp" value="{{ edit_patient['nomor_hp'] if edit_patient else '' }}"></div>
-          <div><label>Golongan Darah</label><input class="input" name="golongan_darah" id="fgoldar" value="{{ edit_patient['golongan_darah'] if edit_patient else '' }}"></div>
-          <div><label>Status</label><input class="input" name="status_perkawinan" id="fstatus" value="{{ edit_patient['status_perkawinan'] if edit_patient else '' }}" placeholder="mis. Menikah"></div>
-          <div><label>Pekerjaan</label><input class="input" name="pekerjaan" id="fpekerjaan" value="{{ edit_patient['pekerjaan'] if edit_patient else '' }}"></div>
+          <div>
+            <label>Golongan Darah</label>
+            <select class="select" name="golongan_darah" id="fgoldar">
+              <option value="">- Pilih Golongan Darah -</option>
+              {% for opt in goldar_opts %}<option value="{{ opt }}" {{ 'selected' if edit_patient and edit_patient['golongan_darah']==opt else '' }}>{{ opt }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Status Perkawinan</label>
+            <select class="select" name="status_perkawinan" id="fstatus">
+              <option value="">- Pilih Status -</option>
+              {% for opt in ['Belum Menikah','Menikah','Cerai Hidup','Cerai Mati','Janda','Duda'] %}<option value="{{ opt }}" {{ 'selected' if edit_patient and edit_patient['status_perkawinan']==opt else '' }}>{{ opt }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Pekerjaan</label>
+            <select class="select" name="pekerjaan" id="fpekerjaan">
+              <option value="">- Pilih Pekerjaan -</option>
+              {% for opt in pekerjaan_opts %}<option value="{{ opt }}" {{ 'selected' if edit_patient and edit_patient['pekerjaan']==opt else '' }}>{{ opt }}</option>{% endfor %}
+            </select>
+          </div>
           <div><label>Nama Suami/Keluarga</label><input class="input" name="nama_keluarga" id="fkeluarga" value="{{ edit_patient['nama_keluarga'] if edit_patient else '' }}"></div>
-          <div><label>Jenis Layanan</label><input class="input" name="jenis_layanan" id="flayanan" value="{{ edit_patient['jenis_layanan'] if edit_patient else '' }}" placeholder="mis. USG 4D"></div>
-          <div><label>Dokter Tujuan</label><select class="select" name="dokter_tujuan" id="fdokter"><option value="">- Pilih Dokter -</option>{% for d in doctors %}<option value="{{ d['full_name'] or d['username'] }}" {{ 'selected' if edit_patient and edit_patient['dokter_tujuan']==(d['full_name'] or d['username']) else '' }}>{{ d['full_name'] or d['username'] }}</option>{% endfor %}</select></div>
-          <div><label>Status Antrian</label><select class="select" name="status_antrian" id="fstatusq"><option value="menunggu">menunggu</option><option value="diperiksa">diperiksa</option><option value="selesai">selesai</option></select></div>
+          <div>
+            <label>Jenis Layanan</label>
+            <select class="select" name="jenis_layanan" id="flayanan">
+              <option value="">- Pilih Jenis Layanan -</option>
+              {% for opt in layanan_opts %}<option value="{{ opt }}" {{ 'selected' if edit_patient and edit_patient['jenis_layanan']==opt else '' }}>{{ opt }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Dokter Tujuan</label>
+            <select class="select" name="dokter_tujuan" id="fdokter">
+              <option value="">- Pilih Dokter -</option>
+              {% for d in doctors %}<option value="{{ d['full_name'] or d['username'] }}" {{ 'selected' if edit_patient and edit_patient['dokter_tujuan']==(d['full_name'] or d['username']) else '' }}>{{ d['full_name'] or d['username'] }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Status Antrian</label>
+            <select class="select" name="status_antrian" id="fstatusq">
+              <option value="menunggu" {{ 'selected' if not edit_patient or edit_patient['status_antrian']=='menunggu' else '' }}>menunggu</option>
+              <option value="diperiksa" {{ 'selected' if edit_patient and edit_patient['status_antrian']=='diperiksa' else '' }}>diperiksa</option>
+              <option value="selesai" {{ 'selected' if edit_patient and edit_patient['status_antrian']=='selesai' else '' }}>selesai</option>
+            </select>
+          </div>
           <div style="grid-column:1/-1"><label>Alamat</label><textarea class="textarea" name="alamat" id="falamat">{{ edit_patient['alamat'] if edit_patient else '' }}</textarea></div>
         </div>
         <div class="toolbar">
@@ -1971,6 +2030,22 @@ def patient_new():
       </form>
     </div>
     <script>
+    // Helper: set select value, add temp option if value not in list
+    function setSelectVal(id, val) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      // Remove previous temp options
+      Array.from(el.options).forEach(function(o){ if(o.dataset.temp) el.removeChild(o); });
+      el.value = val || '';
+      if (val && el.value !== val) {
+        var opt = document.createElement('option');
+        opt.value = val; opt.text = val + ' (lama)';
+        opt.dataset.temp = '1';
+        el.appendChild(opt);
+        el.value = val;
+      }
+    }
+
     function hitungUmur(){
       var tgl=document.getElementById('ftgl').value;
       if(!tgl) return;
@@ -1994,7 +2069,7 @@ def patient_new():
         timer=setTimeout(function(){
           fetch('/api/patient_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
             if(!data.results||data.results.length===0){
-              res.innerHTML='<div style="padding:14px;color:var(--muted)">Tidak ditemukan</div>';res.style.display='block';return;
+              res.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';res.style.display='block';return;
             }
             var html='';
             data.results.forEach(function(p){
@@ -2021,7 +2096,7 @@ def patient_new():
             sel.style.display='block';
             sel.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">'+
               '<div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • NIK: '+(p.nik||'-')+' • HP: '+(p.nomor_hp||'-')+'  '+visitInfo+'</div></div>'+
-              '<button class="btn btn-sm" onclick="batalPilih()">✕ Batal</button></div>'+
+              '<button type="button" class="btn btn-sm" onclick="batalPilih()">✕ Batal</button></div>'+
               '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+
               '<a class="btn btn-primary btn-sm" href="/patients/'+id+'">🔍 Detail</a>'+
               '<a class="btn btn-sm" href="/patients/'+id+'/history">🕘 History</a>'+
@@ -2034,30 +2109,32 @@ def patient_new():
           document.getElementById('ftgl').value=p.tanggal_lahir||'';
           document.getElementById('fumur').value=p.umur||'';
           document.getElementById('fhp').value=p.nomor_hp||'';
-          document.getElementById('fgoldar').value=p.golongan_darah||'';
-          document.getElementById('fstatus').value=p.status_perkawinan||'';
-          document.getElementById('fpekerjaan').value=p.pekerjaan||'';
+          setSelectVal('fgoldar', p.golongan_darah);
+          setSelectVal('fstatus', p.status_perkawinan);
+          setSelectVal('fpekerjaan', p.pekerjaan);
           document.getElementById('fkeluarga').value=p.nama_keluarga||'';
-          document.getElementById('flayanan').value=p.jenis_layanan||'';
-          document.getElementById('fdokter').value=p.dokter_tujuan||'';
+          setSelectVal('flayanan', p.jenis_layanan);
+          setSelectVal('fdokter', p.dokter_tujuan);
+          setSelectVal('fstatusq', p.status_antrian||'menunggu');
           document.getElementById('falamat').value=p.alamat||'';
         });
       };
       window.batalPilih=function(){
         inp.value='';sel.style.display='none';sel.innerHTML='';
         document.getElementById('edit_id').value='';
-        document.getElementById('fnama').value='';document.getElementById('frm').value='';
-        document.getElementById('fnik').value='';document.getElementById('ftgl').value='';
-        document.getElementById('fumur').value='';document.getElementById('fhp').value='';
-        document.getElementById('fgoldar').value='';document.getElementById('fstatus').value='';
-        document.getElementById('fpekerjaan').value='';document.getElementById('fkeluarga').value='';
-        document.getElementById('flayanan').value='';document.getElementById('fdokter').value='';
-        document.getElementById('falamat').value='';
+        ['fnama','frm','fnik','ftgl','fumur','fhp','fkeluarga','falamat'].forEach(function(id){
+          document.getElementById(id).value='';
+        });
+        ['fgoldar','fstatus','fpekerjaan','flayanan','fdokter'].forEach(function(id){
+          document.getElementById(id).value='';
+        });
+        document.getElementById('fstatusq').value='menunggu';
       };
     });
     </script>
     '''
-    return render_page('Input Pasien Baru', body, doctors=doctors, edit_patient=edit_patient)
+    return render_page('Input Pasien Baru', body, doctors=doctors, edit_patient=edit_patient,
+                       goldar_opts=goldar_opts, layanan_opts=layanan_opts, pekerjaan_opts=pekerjaan_opts)
 
 
 @app.route('/patients/<int:patient_id>', methods=['GET', 'POST'])
@@ -2569,9 +2646,23 @@ def audit_logs_page():
 def settings():
     user = current_user()
     if request.method == 'POST':
+        action = request.form.get('action', '')
+
+        # Update master options (superadmin/admin only)
+        if action == 'save_master_opts' and user['role'] in ('superadmin', 'admin'):
+            conn = db(); cur = conn.cursor()
+            for cat in ['golongan_darah', 'jenis_layanan', 'pekerjaan']:
+                val = request.form.get(cat, '').strip()
+                if val:
+                    cur.execute('INSERT OR REPLACE INTO master_options(category, options_text) VALUES(?,?)', (cat, val))
+            conn.commit(); conn.close()
+            log_action('UPDATE_MASTER_OPTS', 'Master options diperbarui')
+            flash('Opsi dropdown berhasil diperbarui.', 'success')
+            return redirect(url_for('settings'))
+
         # Update Nama
         new_name = request.form.get('full_name', '').strip()
-        if 'full_name' in request.form:
+        if 'full_name' in request.form and action != 'save_master_opts':
             if not new_name:
                 flash('Nama tidak boleh kosong.', 'danger')
             elif new_name != user['full_name']:
@@ -2593,11 +2684,19 @@ def settings():
                 flash('Konfirmasi password tidak cocok.', 'danger')
             else:
                 conn = db(); cur = conn.cursor(); cur.execute('UPDATE users SET password_hash=?, updated_at=? WHERE id=?', (generate_password_hash(new), now(), user['id'])); conn.commit(); conn.close(); log_action('CHANGE_PASSWORD', user['username']); flash('Password berhasil diubah.', 'success'); return redirect(url_for('settings'))
+
+    # Load master options
+    conn = db(); cur = conn.cursor()
+    cur.execute('SELECT category, options_text FROM master_options')
+    master_rows = cur.fetchall(); conn.close()
+    master_opts = {r['category']: r['options_text'] for r in master_rows}
+
     body = '''
     <div class="g2 grid">
       <div class="card no-print">
         <h3>Ubah Profil</h3>
         <form method="post" class="grid mb-6">
+          <input type="hidden" name="action" value="update_profile">
           <div><label>Nama Lengkap</label><input class="input" name="full_name" value="{{ user['full_name'] or '' }}" required placeholder="Contoh: dr. Arissa, Sp.OG"></div>
           <button class="btn btn-primary">👤 Simpan Nama</button>
         </form>
@@ -2623,8 +2722,38 @@ def settings():
         </div>
       </div>
     </div>
+
+    {% if user['role'] in ['superadmin','admin'] %}
+    <div class="card" style="margin-top:16px">
+      <h3 style="margin:0 0 6px">⚙️ Kelola Opsi Dropdown Form Pasien</h3>
+      <div class="small muted" style="margin-bottom:16px">Pisahkan setiap opsi dengan koma. Contoh: <code>Umum,BPJS,Asuransi</code>. Perubahan langsung berlaku pada form Input Pasien.</div>
+      <form method="post" class="grid">
+        <input type="hidden" name="action" value="save_master_opts">
+        <div class="form3">
+          <div>
+            <label>🩸 Golongan Darah</label>
+            <input class="input" name="golongan_darah" value="{{ master_opts.get('golongan_darah','A,B,AB,O') }}" placeholder="A,B,AB,O">
+            <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('golongan_darah','A,B,AB,O') }}</div>
+          </div>
+          <div>
+            <label>🏥 Jenis Layanan</label>
+            <input class="input" name="jenis_layanan" value="{{ master_opts.get('jenis_layanan','Umum,BPJS,Asuransi') }}" placeholder="Umum,BPJS,Asuransi">
+            <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('jenis_layanan','') }}</div>
+          </div>
+          <div>
+            <label>💼 Pekerjaan</label>
+            <input class="input" name="pekerjaan" value="{{ master_opts.get('pekerjaan','') }}" placeholder="Karyawan,Wiraswasta,PNS,...">
+            <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('pekerjaan','') }}</div>
+          </div>
+        </div>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn btn-primary">💾 Simpan Opsi Dropdown</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
     '''
-    return render_page('Settings', body, fmt_dt=fmt_dt)
+    return render_page('Settings', body, fmt_dt=fmt_dt, master_opts=master_opts)
 
 
 @app.route('/backup-db')
