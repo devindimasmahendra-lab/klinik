@@ -1950,11 +1950,11 @@ def patient_new():
       <div style="margin-top:10px;padding:10px 14px;border-radius:14px;border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.08);font-size:.8rem;color:#fcd34d">
         ⚠️ Peringatan: Memilih pasien dari pencarian akan mengisi ulang semua field form di bawah. Jika Anda sedang mengisi data pasien baru, data yang sudah diketik akan <strong>ditimpa</strong>.
       </div>
-      <div style="position:relative;margin-top:12px">
+      <div style="margin-top:12px;margin-bottom:12px">
         <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="position:absolute;top:100%;left:0;right:0;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;z-index:1000;display:none;box-shadow:var(--shadow)"></div>
+        <div id="searchResults" style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;display:none;box-shadow:var(--shadow)"></div>
       </div>
-      <div id="selectedPatient" style="display:none;margin-top:12px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,.1)"></div>
+      <div id="selectedPatient" style="display:none;margin-top:12px;margin-bottom:16px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,0.1)"></div>
     </div>
     <div class="card">
       <h3>{{ 'Edit Pasien' if edit_patient else 'Form Input Pasien Baru' }}</h3>
@@ -2066,7 +2066,9 @@ def patient_new():
         clearTimeout(timer);
         var v=inp.value.trim();
         if(v.length<2){res.style.display='none';return;}
+      sel.style.display='none'; // Sembunyikan kartu pasien terpilih segera saat mulai mencari
         timer=setTimeout(function(){
+        sel.style.display='none'; // Hide selected patient when a new search is initiated
           fetch('/api/patient_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
             if(!data.results||data.results.length===0){
               res.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';res.style.display='block';return;
