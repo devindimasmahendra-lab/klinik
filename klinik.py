@@ -1263,6 +1263,47 @@ html.light .login-input{ background: rgba(15,23,42,.04); border-color: rgba(15,2
 html.light .login-input::placeholder { color: rgba(15,23,42,.3); }
 html.light .login-title { color: #0f172a; }
 
+/* Light mode: all text colors readable */
+html.light .text-white,
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300 { color: #0f172a !important; }
+
+html.light .text-slate-400,
+html.light .text-slate-500 { color: #475569 !important; }
+
+html.light .text-emerald-100,
+html.light .text-emerald-200,
+html.light .text-emerald-300 { color: #166534 !important; }
+
+html.light .text-emerald-400,
+html.light .text-emerald-500 { color: #16a34a !important; }
+
+html.light .text-sky-400,
+html.light .text-blue-400 { color: #0369a1 !important; }
+
+html.light .text-amber-400,
+html.light .text-amber-200 { color: #b45309 !important; }
+
+html.light .text-red-200,
+html.light .text-red-400 { color: #dc2626 !important; }
+
+html.light .text-cyan-200 { color: #0e7490 !important; }
+
+html.light .bg-slate-700,
+html.light .bg-slate-800,
+html.light [class*='bg-slate-800/50'],
+html.light [class*="bg-slate-900/50"] { background: rgba(226,232,240,.6) !important; }
+
+html.light .border-slate-700,
+html.light .border-slate-800,
+html.light .border-slate-900 { border-color: rgba(15,23,42,.15) !important; }
+
+html.light .divide-slate-800 > * { border-color: rgba(15,23,42,.1) !important; }
+
+/* Table sticky header light mode */
+html.light table th { background: rgba(240,245,251,.95) !important; }
+
 
 </style>
     </head>
@@ -1675,11 +1716,91 @@ def dashboard():
     patients_rows = cur.fetchall()
     cur.execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8'); audits = cur.fetchall(); conn.close()
     body = '''
-    <div class="hero card"><div><h3 style="margin:0">Selamat datang, {{ user['full_name'] or user['username'] }}</h3><div class="muted">Dashboard ringkas fokus admin dan dokter.</div></div><div class="toolbar no-print">{% if user['role'] in ['superadmin','admin'] %}<a class="btn btn-primary" href="{{ url_for('patient_new') }}">➕ Input Pasien Baru</a>{% endif %}<a class="btn" href="{{ url_for('patients') }}">📋 Lihat Pasien</a></div></div>
-    <div class="g4 grid" style="margin-top:16px"><div class="stat"><div class="muted small">Total pasien hari ini</div><div style="font-size:30px;font-weight:800">{{ total_today }}</div></div><div class="stat"><div class="muted small">Pasien menunggu</div><div style="font-size:30px;font-weight:800">{{ waiting }}</div></div><div class="stat"><div class="muted small">Sedang diperiksa</div><div style="font-size:30px;font-weight:800">{{ checked }}</div></div><div class="stat"><div class="muted small">Pasien selesai</div><div style="font-size:30px;font-weight:800">{{ finished }}</div></div></div>
+    <div class="hero card">
+      <div>
+        <h3 style="margin:0">Selamat datang, {{ user['full_name'] or user['username'] }}</h3>
+        <div class="muted">Dashboard ringkas fokus admin dan dokter.</div>
+      </div>
+      <div class="toolbar no-print">
+        {% if user['role'] in ['superadmin','admin'] %}
+        <a class="btn btn-primary" href="{{ url_for('patient_new') }}">➕ Input Pasien Baru</a>
+        {% endif %}
+        <a class="btn" href="{{ url_for('patients') }}">📋 Lihat Pasien</a>
+      </div>
+    </div>
+
+    <div class="g4 grid" style="margin-top:16px">
+      <div class="stat">
+        <div class="muted small">Total pasien hari ini</div>
+        <div style="font-size:30px;font-weight:800">{{ total_today }}</div>
+      </div>
+      <div class="stat">
+        <div class="muted small">Pasien menunggu</div>
+        <div style="font-size:30px;font-weight:800">{{ waiting }}</div>
+      </div>
+      <div class="stat">
+        <div class="muted small">Sedang diperiksa</div>
+        <div style="font-size:30px;font-weight:800">{{ checked }}</div>
+      </div>
+      <div class="stat">
+        <div class="muted small">Pasien selesai</div>
+        <div style="font-size:30px;font-weight:800">{{ finished }}</div>
+      </div>
+    </div>
+
     <div class="g2 grid" style="margin-top:16px">
-      <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Pasien Terbaru / Antrian</h3><span class="badge">Upload: {{ total_uploads }}</span></div>{% if patients_rows %}<table><thead><tr><th>Pasien</th><th>RM</th><th>Status</th><th>Dokter</th><th>Aksi</th></tr></thead><tbody>{% for p in patients_rows %}<tr><td><strong>{{ p['nama_pasien'] }}</strong><div class="small muted">{{ fmt_dt(p['created_at']) }}</div></td><td>{{ p['nomor_rekam_medis'] }}</td><td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td><td>{{ p['dokter_tujuan'] or '-' }}</td><td><a class="btn btn-sm" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Buka</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada pasien.</div>{% endif %}</div>
-      <div class="card"><h3>Audit Terbaru</h3>{% if audits %}<table><thead><tr><th>Waktu</th><th>User</th><th>Aksi</th></tr></thead><tbody>{% for a in audits %}<tr><td>{{ fmt_dt(a['created_at']) }}</td><td>{{ a['username'] or '-' }}</td><td><strong>{{ a['action'] }}</strong><div class="small muted">{{ a['details'] or '' }}</div></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada audit.</div>{% endif %}</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+          <h3 style="margin:0">Pasien Terbaru / Antrian</h3>
+          <span class="badge">Upload: {{ total_uploads }}</span>
+        </div>
+        {% if patients_rows %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Pasien</th><th>RM</th><th>Status</th><th>Dokter</th><th>Aksi</th></tr>
+            </thead>
+            <tbody>
+              {% for p in patients_rows %}
+              <tr>
+                <td><strong>{{ p['nama_pasien'] }}</strong><div class="small muted">{{ fmt_dt(p['created_at']) }}</div></td>
+                <td>{{ p['nomor_rekam_medis'] }}</td>
+                <td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td>
+                <td>{{ p['dokter_tujuan'] or '-' }}</td>
+                <td><a class="btn btn-sm" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Buka</a></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty">Belum ada pasien.</div>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h3>Audit Terbaru</h3>
+        {% if audits %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Waktu</th><th>User</th><th>Aksi</th></tr>
+            </thead>
+            <tbody>
+              {% for a in audits %}
+              <tr>
+                <td>{{ fmt_dt(a['created_at']) }}</td>
+                <td>{{ a['username'] or '-' }}</td>
+                <td><strong>{{ a['action'] }}</strong><div class="small muted">{{ a['details'] or '' }}</div></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty">Belum ada audit.</div>
+        {% endif %}
+      </div>
     </div>
     '''
     return render_page('Dashboard', body, total_today=total_today, waiting=waiting, checked=checked, finished=finished, total_uploads=total_uploads, patients_rows=patients_rows, audits=audits, fmt_dt=fmt_dt)
@@ -1801,11 +1922,14 @@ def patient_new():
                 flash('Nomor rekam medis sudah digunakan.', 'danger')
     conn.close()
     body = '''
-    <div class="card no-print" style="margin-bottom:16px">
-      <h3>Cari Pasien Lama</h3>
-      <div class="small muted">Ketik nama / RM / NIK untuk mencari pasien yang sudah terdaftar, lalu pilih untuk mengedit datanya.</div>
-      <div style="position:relative;margin-top:10px">
-        <input class="input" id="searchExisting" placeholder="Ketik minimal 2 huruf..." style="width:100%">
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="margin:0">Cari & Edit Pasien Lama</h3>
+      <div class="small muted">Ketik nama / RM / NIK untuk mencari pasien yang sudah terdaftar.</div>
+      <div style="margin-top:10px;padding:10px 14px;border-radius:14px;border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.08);font-size:.8rem;color:#fcd34d">
+        ⚠️ Peringatan: Memilih pasien dari pencarian akan mengisi ulang semua field form di bawah. Jika Anda sedang mengisi data pasien baru, data yang sudah diketik akan <strong>ditimpa</strong>.
+      </div>
+      <div style="position:relative;margin-top:12px">
+        <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
         <div id="searchResults" style="position:absolute;top:100%;left:0;right:0;max-height:300px;overflow-y:auto;background:var(--card2);border:1px solid var(--border);border-radius:16px;z-index:100;display:none"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,.1)"></div>
