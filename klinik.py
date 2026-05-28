@@ -514,6 +514,22 @@ html.light {
   --border:rgba(15,23,42,0.08); --shadow:0 8px 24px rgba(15,23,42,0.10);
 }
 
+/* ---- CUSTOM SCROLLBAR ---- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
 /* ---- RESET / BASE ---- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -2361,34 +2377,186 @@ def patient_detail(patient_id):
     public_url = request.url_root.rstrip('/') + url_for('patient_result', token=patient['access_token'])
     qr_uri = qr_data_uri(public_url)
     body = '''
-    <div class="g2 grid"><div class="card"><div class="patient-header"><div><h3 style="margin:0">{{ patient['nama_pasien'] }}</h3><div class="small muted">No RM: {{ patient['nomor_rekam_medis'] }} • Dibuat: {{ fmt_dt(patient['created_at']) }}</div></div><span class="badge {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span></div><div class="pill-list" style="margin:12px 0"><span class="pill">NIK: {{ patient['nik'] or '-' }}</span><span class="pill">Umur: {{ patient['umur'] or '-' }}</span><span class="pill">Gol. darah: {{ patient['golongan_darah'] or '-' }}</span><span class="pill">Layanan: {{ patient['jenis_layanan'] or '-' }}</span></div><div class="patient-info-grid"><div><strong>Alamat:</strong><div class="muted">{{ patient['alamat'] or '-' }}</div></div><div><strong>HP:</strong> {{ patient['nomor_hp'] or '-' }}</div><div><strong>Status:</strong> {{ patient['status_perkawinan'] or '-' }}</div><div><strong>Pekerjaan:</strong> {{ patient['pekerjaan'] or '-' }}</div><div><strong>Suami/Keluarga:</strong> {{ patient['nama_keluarga'] or '-' }}</div><div><strong>Dokter Tujuan:</strong> {{ patient['dokter_tujuan'] or '-' }}</div></div></div>
-    <div class="card"><h3>Akses Hasil Pasien</h3><div class="small muted">Bagikan link token unik ini ke pasien.</div><div class="mono wrap" style="margin:10px 0 14px">{{ public_url }}</div><div class="toolbar no-print"><a class="btn btn-primary" href="{{ url_for('patient_result', token=patient['access_token']) }}" target="_blank">🔗 Buka Link</a><button class="btn" onclick="navigator.clipboard.writeText({{ public_url|tojson }});alert('Link disalin');">📋 Copy Link</button></div>{% if qr_uri %}<div style="margin-top:14px"><img src="{{ qr_uri }}" style="max-width:180px;border-radius:18px;background:#fff;padding:10px"></div>{% else %}<div class="small muted" style="margin-top:14px">QR code aktif jika modul qrcode tersedia. Link tetap bisa dipakai.</div>{% endif %}</div></div>
-    <div class="toolbar no-print" style="margin-top:16px">
-        <form method="post" onsubmit="return confirm('Antrikan pasien ini?')"><input type="hidden" name="action" value="add_to_queue"><button class="btn btn-primary">➕ Masukkan ke Antrian Hari Ini</button></form>
-        <a class="btn" href="{{ url_for('patient_new', edit=patient['id']) }}">✏️ Edit Data Pasien</a>
-    </div>
-    {% if soaps %}
-    <div class="card" style="margin-top:16px">
-      <h3 class="flex items-center gap-2"><span class="bg-emerald-500 w-2 h-6 rounded-full inline-block"></span> Ringkasan Perkembangan Janin</h3>
-      <div class="small muted mb-3">Data historis dari kunjungan sebelumnya untuk memantau tren pertumbuhan.</div>
-      <table class="w-full text-sm">
-          <thead class="bg-slate-800/50">
-            <tr><th class="p-3">Tanggal</th><th class="p-3">Usia Hamil</th><th class="p-3">DJJ (bpm)</th><th class="p-3">Posisi</th><th class="p-3">Berat (gr)</th></tr>
-          </thead>
-          <tbody class="divide-y divide-slate-800">
-            {% for s in soaps|reverse %}
-            <tr class="hover:bg-slate-800/20"><td>{{ fmt_dt(s['created_at']).split(' ')[0] }}</td><td class="font-bold text-white">{{ s['usia_kehamilan'] or '-' }}</td><td>{{ s['detak_jantung_janin'] or '-' }}</td><td>{{ s['posisi_janin'] or '-' }}</td><td class="font-bold text-emerald-400">{{ s['estimasi_berat_janin'] or '-' }}</td></tr>
+    <div class="space-y-4">
+      <!-- Header Pasien -->
+      <div class="card p-6 bg-gradient-to-br from-slate-800/40 to-slate-900/40">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div class="flex items-center gap-3 mb-1">
+              <h2 class="text-2xl font-black text-white">{{ patient['nama_pasien'] }}</h2>
+              <span class="pill {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span>
+            </div>
+            <div class="text-sm text-slate-400 font-medium">
+              No RM: <span class="text-emerald-400 font-mono">{{ patient['nomor_rekam_medis'] }}</span> • 
+              NIK: {{ patient['nik'] or '-' }} • 
+              HP: {{ patient['nomor_hp'] or '-' }}
+            </div>
+          </div>
+          <div class="flex gap-2 no-print">
+            <form method="post" onsubmit="return confirm('Antrikan pasien ini?')">
+              <input type="hidden" name="action" value="add_to_queue">
+              <button class="btn btn-sm btn-primary">➕ Antrikan</button>
+            </form>
+            <a class="btn btn-sm" href="{{ url_for('patient_new', edit=patient['id']) }}">✏️ Edit</a>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-white/5 text-xs">
+          <div><span class="text-slate-500 block mb-1">UMUR / TTL</span><span class="text-slate-200 font-bold">{{ patient['umur'] or '-' }} / {{ patient['tanggal_lahir'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">LAYANAN / GOLDA</span><span class="text-slate-200 font-bold">{{ patient['jenis_layanan'] or '-' }} / {{ patient['golongan_darah'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">KELUARGA</span><span class="text-slate-200 font-bold">{{ patient['nama_keluarga'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">DOKTER TUJUAN</span><span class="text-slate-200 font-bold text-sky-400">{{ patient['dokter_tujuan'] or '-' }}</span></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <!-- Workspace Utama (SOAP & Growth) -->
+        <div class="lg:col-span-8 space-y-4">
+          <!-- Form SOAP -->
+          <div class="card">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-bold flex items-center gap-2"><span class="w-1.5 h-6 bg-emerald-500 rounded-full"></span> Pemeriksaan Baru (SOAP)</h3>
+              <div class="no-print flex items-center gap-2">
+                <select class="select py-1 text-xs" id="soapTemplate" style="max-width:180px">
+                  <option value="">Gunakan Template...</option>
+                  {% for t in templates %}<option value='{{ {"subjective":t["subjective"],"objective":t["objective"],"assessment":t["assessment"],"plan":t["plan"]}|tojson }}'>{{ t['title'] }}</option>{% endfor %}
+                </select>
+                <button type="button" class="btn btn-sm" onclick="applySoap()">⚡</button>
+              </div>
+            </div>
+            <form method="post" class="space-y-4 no-print">
+              <input type="hidden" name="action" value="save_soap">
+              <div class="grid md:grid-cols-2 gap-4">
+                <div class="space-y-3">
+                  <div><label>Subjective (Keluhan)</label><textarea id="subjective" class="textarea h-24" name="subjective" placeholder="Keluhan pasien..."></textarea></div>
+                  <div><label>Objective (Vital & Fisik)</label><textarea id="objective" class="textarea h-24" name="objective" placeholder="Hasil pemeriksaan fisik..."></textarea></div>
+                  <div class="grid grid-cols-3 gap-2">
+                    <div><label class="text-[10px]">TD SYST</label><input class="input py-1 text-center" name="td_sistolik" placeholder="120"></div>
+                    <div><label class="text-[10px]">TD DIAST</label><input class="input py-1 text-center" name="td_diastolik" placeholder="80"></div>
+                    <div><label class="text-[10px]">DJJ</label><input class="input py-1 text-center font-bold text-sky-400" name="detak_jantung_janin" placeholder="140"></div>
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <div><label>Assessment (Diagnosis)</label><textarea id="assessment" class="textarea h-24" name="assessment" placeholder="Diagnosis / ICD-10..."></textarea></div>
+                  <div><label>Plan (Rencana / Terapi)</label><textarea id="plan" class="textarea h-24" name="plan" placeholder="Rencana tindak lanjut..."></textarea></div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div><label class="text-[10px]">USIA HAMIL</label><input class="input py-1 text-center" name="usia_kehamilan" placeholder="28w"></div>
+                    <div><label class="text-[10px]">EBJ (Gram)</label><input class="input py-1 text-center font-bold text-emerald-400" name="estimasi_berat_janin" placeholder="1200"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="p-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center">
+                <label class="flex items-center gap-2 cursor-pointer text-xs mb-0"><input type="checkbox" name="informed_consent" required> Informed Consent Disetujui Pasien</label>
+                <button class="btn btn-primary">🩺 Simpan Rekam Medis</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tabel Growth -->
+          {% if soaps %}
+          <div class="card overflow-hidden">
+            <h3 class="text-sm font-bold mb-3 uppercase tracking-wider text-slate-500">Monitoring Perkembangan</h3>
+            <div class="table-wrap">
+              <table class="text-xs">
+                <thead class="bg-white/5">
+                  <tr><th>Tanggal</th><th>Usia Hamil</th><th>DJJ (bpm)</th><th>Posisi</th><th>Berat (gr)</th></tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                  {% for s in soaps|reverse %}
+                  <tr class="hover:bg-white/5"><td>{{ fmt_dt(s['created_at']).split(' ')[0] }}</td><td class="font-bold text-white">{{ s['usia_kehamilan'] or '-' }}</td><td>{{ s['detak_jantung_janin'] or '-' }}</td><td>{{ s['posisi_janin'] or '-' }}</td><td class="font-bold text-emerald-400">{{ s['estimasi_berat_janin'] or '-' }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- SOAP HISTORY -->
+          <div class="space-y-3">
+            <h3 class="text-lg font-bold px-2">Kunjungan Sebelumnya</h3>
+            {% for s in soaps %}
+            <div class="card p-4 bg-white/5 border-white/5 hover:bg-white/10 transition-colors">
+              <div class="flex justify-between items-start mb-2 border-b border-white/5 pb-2">
+                <div class="text-xs font-bold text-emerald-400">{{ fmt_dt(s['created_at']) }}</div>
+                <div class="text-[10px] uppercase text-slate-500 font-bold">Oleh: {{ s['doctor_name'] or s['doctor_username'] }}</div>
+              </div>
+              <div class="grid grid-cols-2 gap-4 text-xs">
+                <div class="wrap"><span class="text-slate-500 font-bold">A:</span> {{ s['assessment'] or '-' }}</div>
+                <div class="wrap"><span class="text-slate-500 font-bold">P:</span> {{ s['plan'] or '-' }}</div>
+              </div>
+            </div>
             {% endfor %}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        <!-- Sidebar Aksi (lg:col-span-4) -->
+        <div class="lg:col-span-4 space-y-4">
+          <!-- Antrian & Upload -->
+          <div class="card space-y-4 no-print">
+            <div>
+              <label>Update Status Antrian</label>
+              <form method="post" class="flex gap-2">
+                <input type="hidden" name="action" value="update_status">
+                <select class="select flex-1" name="status_antrian">
+                  {% for s in ['menunggu','diperiksa','selesai'] %}<option value="{{ s }}" {{ 'selected' if patient['status_antrian']==s else '' }}>{{ s }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-primary">💾</button>
+              </form>
+            </div>
+            <div class="pt-4 border-t border-white/5">
+              <label>Upload Gambar/Video USG</label>
+              <form method="post" enctype="multipart/form-data" class="space-y-2">
+                <input type="hidden" name="action" value="upload_file">
+                <input class="input text-xs" type="file" name="usg_file" accept=".jpg,.jpeg,.png,.pdf,.mp4,.mov" required>
+                <button class="btn btn-sm btn-primary w-full justify-center">⬆️ Mulai Upload</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Billing -->
+          <div class="card space-y-4">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Billing & Transaksi</h3>
+            {% if current_user['role'] in ['superadmin','admin'] %}
+            <form method="post" class="space-y-2 no-print">
+              <input type="hidden" name="action" value="add_billing">
+              <input class="input py-1 text-xs" name="item_name" placeholder="Nama Layanan">
+              <input class="input py-1 text-xs" type="number" name="amount" placeholder="Harga (Rp)">
+              <button class="btn btn-sm w-full">💳 Tambah Tagihan</button>
+            </form>
+            {% endif %}
+            <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {% for b in bills %}
+              <div class="flex justify-between items-center p-2 bg-white/5 rounded-lg text-[10px]">
+                <div><div class="font-bold text-slate-200">{{ b['item_name'] }}</div><div class="text-slate-500">{{ rupiah(b['amount']) }}</div></div>
+                <span class="pill {{ 'selesai' if b['status_bayar']=='lunas' else 'unpaid' }}">{{ b['status_bayar'] }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Akses Token & Hasil -->
+          <div class="card text-center p-6 space-y-4">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Link Hasil Pasien</h3>
+            {% if qr_uri %}<img src="{{ qr_uri }}" class="mx-auto w-32 h-32 p-2 bg-white rounded-2xl shadow-xl">{% endif %}
+            <div class="mono text-[10px] break-all bg-black/20 p-2 rounded-lg text-slate-400">{{ public_url }}</div>
+            <button class="btn btn-sm w-full justify-center" onclick="navigator.clipboard.writeText('{{ public_url }}');alert('Link disalin')">📋 Salin Link WA</button>
+          </div>
+        </div>
       </div>
     </div>
-    {% endif %}
-    <div class="g2 grid" style="margin-top:16px"><div class="card no-print"><h3>Update Status Antrian</h3><form method="post" class="toolbar"><input type="hidden" name="action" value="update_status"><select class="select" name="status_antrian" style="max-width:220px">{% for s in ['menunggu','diperiksa','selesai'] %}<option value="{{ s }}" {{ 'selected' if patient['status_antrian']==s else '' }}>{{ s }}</option>{% endfor %}</select><button class="btn btn-primary">💾 Simpan Status</button><a class="btn" href="{{ url_for('patient_history', patient_id=patient['id']) }}">🕘 Riwayat</a></form></div><div class="card no-print"><h3>Upload Hasil USG</h3><div class="small muted">jpg/png/pdf/mp4/mov • max {{ max_mb }} MB</div><form method="post" enctype="multipart/form-data" class="toolbar" style="margin-top:12px"><input type="hidden" name="action" value="upload_file"><input class="input" type="file" name="usg_file" accept=".jpg,.jpeg,.png,.pdf,.mp4,.mov" required><button class="btn btn-primary">⬆️ Upload</button></form></div></div>
-    <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">SOAP Pemeriksaan</h3><div class="toolbar no-print"><select class="select" id="soapTemplate" style="max-width:280px"><option value="">Pilih template SOAP cepat...</option>{% for t in templates %}<option value='{{ {"subjective":t["subjective"],"objective":t["objective"],"assessment":t["assessment"],"plan":t["plan"]}|tojson }}'>{{ t['title'] }}</option>{% endfor %}</select><button type="button" class="btn" onclick="applySoap()">⚡ Terapkan</button></div></div><div class="small muted" style="margin:8px 0 12px">SOP internasional: SOAP + Kode ICD-10, Tanda Vital (TD/Nadi/Suhu/RR), Informed Consent.</div><form method="post" class="grid no-print"><input type="hidden" name="action" value="save_soap"><div class="form2"><div style="grid-column:1/-1"><label>Subjective (Keluhan)</label><textarea id="subjective" class="textarea" name="subjective"></textarea></div><div style="grid-column:1/-1"><label>Objective (Temuan Objektif)</label><textarea id="objective" class="textarea" name="objective"></textarea></div><div><label>TD Sistolik (mmHg)</label><input class="input" name="td_sistolik" placeholder="mis. 120"></div><div><label>TD Diastolik (mmHg)</label><input class="input" name="td_diastolik" placeholder="mis. 80"></div><div><label>Nadi (x/menit)</label><input class="input" name="nadi" placeholder="mis. 80"></div><div><label>Suhu (°C)</label><input class="input" name="suhu" placeholder="mis. 36.5"></div><div><label>RR (x/menit)</label><input class="input" name="rr" placeholder="mis. 20"></div><div style="grid-column:1/-1"><label>Assessment (Diagnosis)</label><textarea id="assessment" class="textarea" name="assessment"></textarea></div><div><label>Kode ICD-10</label><input class="input" name="kode_icd10" placeholder="mis. O99.0"></div><div><label>Informed Consent</label><label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" name="informed_consent"> Pasien sudah mendapatkan penjelasan dan menyetujui tindakan</label></div><div style="grid-column:1/-1"><label>Plan (Rencana Tindak Lanjut)</label><textarea id="plan" class="textarea" name="plan"></textarea></div><div><label>Usia Kehamilan</label><input class="input" name="usia_kehamilan" placeholder="mis. 28 minggu"></div><div><label>Detak Jantung Janin</label><input class="input" name="detak_jantung_janin" placeholder="mis. 145 bpm"></div><div><label>Posisi Janin</label><input class="input" name="posisi_janin" placeholder="mis. cephalic"></div><div><label>Estimasi Berat Janin</label><input class="input" name="estimasi_berat_janin" placeholder="mis. 1200 gr"></div><div style="grid-column:1/-1"><label>Catatan Dokter</label><textarea class="textarea" name="catatan_dokter"></textarea></div><div style="grid-column:1/-1"><label>Rekomendasi Kontrol Ulang</label><textarea class="textarea" name="rekomendasi_kontrol_ulang"></textarea></div></div><div class="toolbar"><button class="btn btn-primary">🩺 Simpan SOAP</button></div></form><script>function applySoap(){const el=document.getElementById('soapTemplate');if(!el.value)return;try{const d=JSON.parse(el.value);document.getElementById('subjective').value=d.subjective||'';document.getElementById('objective').value=d.objective||'';document.getElementById('assessment').value=d.assessment||'';document.getElementById('plan').value=d.plan||'';}catch(e){alert('Template gagal dipakai')}}</script></div>
-    <div class="g2 grid" style="margin-top:16px"><div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Riwayat SOAP</h3><span class="badge">{{ soaps|length }} catatan</span></div>{% if soaps %}{% for s in soaps %}<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><strong>{{ s['doctor_name'] or s['doctor_username'] or '-' }}</strong><div class="small muted">{{ fmt_dt(s['created_at']) }}</div></div><span class="badge">SOAP</span></div><div class="wrap"><strong>S:</strong> {{ s['subjective'] or '-' }}</div><div class="wrap"><strong>O:</strong> {{ s['objective'] or '-' }}</div><div class="wrap"><strong>A:</strong> {{ s['assessment'] or '-' }}</div><div class="wrap"><strong>P:</strong> {{ s['plan'] or '-' }}</div><div class="pill-list" style="margin-top:10px"><span class="pill">Usia: {{ s['usia_kehamilan'] or '-' }}</span><span class="pill">DJJ: {{ s['detak_jantung_janin'] or '-' }}</span><span class="pill">Posisi: {{ s['posisi_janin'] or '-' }}</span><span class="pill">EBJ: {{ s['estimasi_berat_janin'] or '-' }}</span></div>{% if s['catatan_dokter'] %}<div class="wrap" style="margin-top:10px"><strong>Catatan:</strong> {{ s['catatan_dokter'] }}</div>{% endif %}{% if s['rekomendasi_kontrol_ulang'] %}<div class="wrap"><strong>Kontrol Ulang:</strong> {{ s['rekomendasi_kontrol_ulang'] }}</div>{% endif %}</div>{% endfor %}{% else %}<div class="empty">Belum ada riwayat SOAP.</div>{% endif %}</div>
-    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Billing Sederhana</h3><span class="badge">{{ bills|length }} item</span></div>{% if current_user['role'] in ['superadmin','admin'] %}<form method="post" class="grid no-print"><input type="hidden" name="action" value="add_billing"><div class="form3"><div><label>Item</label><input class="input" name="item_name" placeholder="mis. USG 4D"></div><div><label>Nominal</label><input class="input" type="number" step="0.01" name="amount" placeholder="0"></div><div><label>Status Bayar</label><select class="select" name="status_bayar"><option value="belum_lunas">belum_lunas</option><option value="lunas">lunas</option></select></div></div><div><label>Catatan</label><textarea class="textarea" name="notes"></textarea></div><button class="btn btn-primary">💳 Tambah Billing</button></form><hr style="border-color:var(--border);margin:16px 0">{% endif %}{% if bills %}<table><thead><tr><th>Tanggal</th><th>Item</th><th>Nominal</th><th>Status</th></tr></thead><tbody>{% set ns = namespace(total=0) %}{% for b in bills %}{% set ns.total = ns.total + (b['amount'] or 0) %}<tr><td>{{ fmt_dt(b['created_at']) }}</td><td><strong>{{ b['item_name'] }}</strong><div class="small muted">{{ b['notes'] or '' }}</div></td><td>{{ rupiah(b['amount']) }}</td><td><div class="flex items-center gap-2"><span class="badge {{ 'paid' if b['status_bayar']=='lunas' else 'unpaid' }}">{{ b['status_bayar'] }}</span>{% if b['status_bayar'] != 'lunas' and current_user['role'] in ['superadmin','admin'] %}<form method="post" style="display:inline"><input type="hidden" name="action" value="set_lunas"><input type="hidden" name="billing_id" value="{{ b['id'] }}"><button class="btn btn-sm bg-emerald-600 hover:bg-emerald-500 text-white py-1 px-2 text-[10px]">LUNAS</button></form>{% endif %}</div></td></tr>{% endfor %}</tbody><tfoot><tr><th colspan="2">Total</th><th>{{ rupiah(ns.total) }}</th><th></th></tr></tfoot></table>{% else %}<div class="empty">Belum ada billing.</div>{% endif %}</div></div>
-    <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">File Hasil USG</h3><span class="badge">{{ files|length }} file</span></div>{% if files %}<table><thead><tr><th>File</th><th>Tipe</th><th>Ukuran</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>{% for f in files %}<tr><td><strong>{{ f['original_filename'] }}</strong></td><td>{{ file_badge(f['file_ext']) }}</td><td>{{ '%.2f MB'|format((f['file_size'] or 0)/1024/1024) }}</td><td>{{ fmt_dt(f['created_at']) }}</td><td><div class="toolbar"><a class="btn btn-sm" href="{{ url_for('file_view_auth', upload_id=f['id']) }}" target="_blank">Buka</a><a class="btn btn-sm" href="{{ url_for('patient_file_public', token=patient['access_token'], upload_id=f['id']) }}" target="_blank">Link Pasien</a></div></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada file hasil USG.</div>{% endif %}</div>
+
+    <script>
+    function applySoap(){
+      const el=document.getElementById('soapTemplate');
+      if(!el.value)return;
+      try{
+        const d=JSON.parse(el.value);
+        document.getElementById('subjective').value=d.subjective||'';
+        document.getElementById('objective').value=d.objective||'';
+        document.getElementById('assessment').value=d.assessment||'';
+        document.getElementById('plan').value=d.plan||'';
+      }catch(e){alert('Template gagal dipakai')}
+    }
+    </script>
     '''
     return render_page('Detail Pasien - ' + patient['nama_pasien'], body, patient=patient, public_url=public_url, qr_uri=qr_uri, soaps=soaps, files=files, bills=bills, templates=templates, file_badge=file_badge, fmt_dt=fmt_dt, rupiah=rupiah, max_mb=MAX_MB)
 
