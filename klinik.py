@@ -123,7 +123,7 @@ def file_badge(ext):
 
 
 def rm_auto():
-    return 'RM' + datetime.now().strftime('%y%m%d%H%M%S')
+    return 'RM' + datetime.now().strftime('%y%m%d%H%M%S') + str(uuid.uuid4().hex[:4]).upper()
 
 
 def get_port():
@@ -2409,7 +2409,13 @@ def patient_detail(patient_id):
               <input type="hidden" name="action" value="add_to_queue">
               <button class="btn btn-sm btn-primary">➕ Antrikan</button>
             </form>
+            
             <a class="btn btn-sm" href="{{ url_for('patient_new', edit=patient['id']) }}">✏️ Edit</a>
+            {% if user['role'] == 'superadmin' %}
+            <form method="post" action="{{ url_for('patient_delete', patient_id=patient['id']) }}" onsubmit="return confirm('Hapus pasien ini PERMANEN?')">
+              <button class="btn btn-sm bg-red-600 hover:bg-red-500 text-white border-none">🗑️ Hapus</button>
+            </form>
+            {% endif %}
           </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-white/5 text-xs">
@@ -2491,7 +2497,14 @@ def patient_detail(patient_id):
             <div class="card p-4 bg-white/5 border-white/5 hover:bg-white/10 transition-colors">
               <div class="flex justify-between items-start mb-2 border-b border-white/5 pb-2">
                 <div class="text-xs font-bold text-emerald-400">{{ fmt_dt(s['created_at']) }}</div>
-                <div class="text-[10px] uppercase text-slate-500 font-bold">Oleh: {{ s['doctor_name'] or s['doctor_username'] }}</div>
+                <div class="flex items-center gap-2">
+                  <div class="text-[10px] uppercase text-slate-500 font-bold">Oleh: {{ s['doctor_name'] or s['doctor_username'] }}</div>
+                  {% if user['role'] != 'pasien' %}
+                  <form method="post" action="{{ url_for('soap_delete', soap_id=s['id']) }}" onsubmit="return confirm('Hapus rekam medis ini?')">
+                    <button class="text-red-500 hover:text-red-400 text-[10px] font-bold">🗑️ Hapus</button>
+                  </form>
+                  {% endif %}
+                </div>
               </div>
               <div class="grid grid-cols-2 gap-4 text-xs">
                 <div class="wrap"><span class="text-slate-500 font-bold">A:</span> {{ s['assessment'] or '-' }}</div>
@@ -2541,7 +2554,14 @@ def patient_detail(patient_id):
               {% for b in bills %}
               <div class="flex justify-between items-center p-2 bg-white/5 rounded-lg text-[10px]">
                 <div><div class="font-bold text-slate-200">{{ b['item_name'] }}</div><div class="text-slate-500">{{ rupiah(b['amount']) }}</div></div>
-                <span class="pill {{ 'selesai' if b['status_bayar']=='lunas' else 'unpaid' }}">{{ b['status_bayar'] }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="pill {{ 'selesai' if b['status_bayar']=='lunas' else 'unpaid' }}">{{ b['status_bayar'] }}</span>
+                  {% if user['role'] in ['superadmin','admin'] %}
+                  <form method="post" action="{{ url_for('billing_delete', billing_id=b['id']) }}" onsubmit="return confirm('Hapus item billing?')">
+                    <button class="text-red-500">✕</button>
+                  </form>
+                  {% endif %}
+                </div>
               </div>
               {% endfor %}
             </div>
@@ -2839,6 +2859,64 @@ def patient_file_public(token, upload_id):
     row = cur.fetchone(); conn.close()
     if not row: abort(404)
     return send_from_directory(UPLOAD_DIR, row['stored_filename'], as_attachment=False, download_name=row['original_filename'])
+
+
+@app.route('/patients/<int:patient_id>/delete', methods=['POST'])
+@role_required('superadmin')
+def patient_delete(patient_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute('DELETE FROM patients WHERE id=?', (patient_id,))
+    conn.commit(); conn.close()
+    log_action('DELETE_PATIENT', f'Hapus pasien ID #{patient_id}')
+    flash('Data pasien berhasil dihapus secara permanen.', 'success')
+    return redirect(url_for('patients'))
+
+
+@app.route('/soap/<int:soap_id>/delete', methods=['POST'])
+@role_required('superadmin', 'admin', 'dokter')
+def soap_delete(soap_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute('SELECT patient_id FROM soap_records WHERE id=?', (soap_id,))
+    row = cur.fetchone()
+    if not row: conn.close(); abort(404)
+    pid = row['patient_id']
+    cur.execute('DELETE FROM soap_records WHERE id=?', (soap_id,))
+    conn.commit(); conn.close()
+    log_action('DELETE_SOAP', f'Hapus SOAP ID #{soap_id}')
+    flash('Catatan rekam medis berhasil dihapus.', 'info')
+    return redirect(url_for('patient_detail', patient_id=pid))
+
+
+@app.route('/billing/<int:billing_id>/delete', methods=['POST'])
+@role_required('superadmin', 'admin')
+def billing_delete(billing_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute('SELECT patient_id FROM billing WHERE id=?', (billing_id,))
+    row = cur.fetchone()
+    if not row: conn.close(); abort(404)
+    pid = row['patient_id']
+    cur.execute('DELETE FROM billing WHERE id=?', (billing_id,))
+    conn.commit(); conn.close()
+    log_action('DELETE_BILLING', f'Hapus item billing #{billing_id}')
+    flash('Item tagihan berhasil dihapus.', 'info')
+    return redirect(url_for('patient_detail', patient_id=pid))
+
+
+@app.route('/file/<int:upload_id>/delete', methods=['POST'])
+@role_required('superadmin', 'admin', 'dokter')
+def file_delete(upload_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute('SELECT stored_filename, patient_id FROM uploads WHERE id=?', (upload_id,))
+    row = cur.fetchone()
+    if not row: conn.close(); abort(404)
+    pid = row['patient_id']
+    path = os.path.join(UPLOAD_DIR, row['stored_filename'])
+    if os.path.exists(path): os.remove(path)
+    cur.execute('DELETE FROM uploads WHERE id=?', (upload_id,))
+    conn.commit(); conn.close()
+    log_action('DELETE_UPLOAD', f'Hapus file upload #{upload_id}')
+    flash('File hasil USG berhasil dihapus.', 'success')
+    return redirect(url_for('patient_detail', patient_id=pid))
 
 
 @app.route('/soap-templates', methods=['GET', 'POST'])
