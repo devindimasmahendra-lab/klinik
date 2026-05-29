@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 
 # =====================================================
@@ -1587,12 +1588,12 @@ html.light table th { background: rgba(240,245,251,.95) !important; }
             <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' else '' }}"><span class="nav-icon">🏠</span><span>Dashboard</span></a>
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('antrian') }}" class="{{ 'active' if request.endpoint=='antrian' else '' }}"><span class="nav-icon">🚶</span><span>Antrian</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="{{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}"><span class="nav-icon">📚</span><span>Rekam Medis</span></a>{% endif %}
-            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="{{ 'active' if request.endpoint=='patient_new' else '' }}"><span class="nav-icon">➕</span><span>Input Pasien</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="{{ 'active' if request.endpoint=='patient_new' else '' }}"><span class="nav-icon">+</span><span>Input Pasien</span></a>{% endif %}
             <div class="nav-title">Operasional</div>
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('panduan_admin') }}" class="{{ 'active' if request.endpoint=='panduan_admin' else '' }}"><span class="nav-icon">👩‍💻</span><span>SOP Admin</span></a>{% endif %}
-            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="{{ 'active' if request.endpoint=='panduan_dokter' else '' }}"><span class="nav-icon">👨‍⚕️</span><span>SOP Dokter</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="{{ 'active' if request.endpoint=='panduan_dokter' else '' }}"><span class="nav-icon">[DOKTER]</span><span>SOP Dokter</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('soap_templates_page') }}" class="{{ 'active' if request.endpoint=='soap_templates_page' else '' }}"><span class="nav-icon">🧩</span><span>Template</span></a>{% endif %}
-            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="{{ 'active' if request.endpoint=='sop_page' else '' }}"><span class="nav-icon">📋</span><span>SOP</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="{{ 'active' if request.endpoint=='sop_page' else '' }}"><span class="nav-icon">[DATA]</span><span>SOP</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('uploads_page') }}" class="{{ 'active' if request.endpoint=='uploads_page' else '' }}"><span class="nav-icon">📁</span><span>Hasil USG</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('billing_page') }}" class="{{ 'active' if request.endpoint=='billing_page' else '' }}"><span class="nav-icon">💳</span><span>Billing</span></a>{% endif %}
             <div class="nav-title">Sistem</div>
@@ -1714,7 +1715,7 @@ def add_appointment():
 
     body = """
     <div class="card">
-      <h2>➕ Tambah Appointment</h2>
+      <h2>+ Tambah Appointment</h2>
 
       <form method="post" class="grid">
         <div>
@@ -1997,7 +1998,7 @@ def dashboard():
           <div class="flex gap-3 no-print">
             {% if user['role'] in ['superadmin','admin'] %}
             <a class="btn btn-primary shadow-lg shadow-emerald-500/20" href="{{ url_for('patient_new') }}">
-              <span class="text-lg">➕</span> Input Pasien Baru
+              <span class="text-lg">+</span> Input Pasien Baru
             </a>
             {% endif %}
             <a class="btn bg-slate-800 border-slate-700 hover:bg-slate-700" href="{{ url_for('antrian') }}">
@@ -2033,7 +2034,7 @@ def dashboard():
               <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Sedang Diperiksa</div>
               <div class="text-4xl font-black text-cyan-400">{{ checked }}</div>
             </div>
-            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">👨‍⚕️</div>
+            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">[DOKTER]</div>
           </div>
         </div>
         <div class="stat group hover:scale-[1.02] transition-transform border-blue-500/20">
@@ -2073,7 +2074,7 @@ def dashboard():
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="card p-0 overflow-hidden">
           <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
-            <h3 class="text-lg font-bold m-0">📋 Antrian Aktif / Pasien Terbaru</h3>
+            <h3 class="text-lg font-bold m-0">[DATA] Antrian Aktif / Pasien Terbaru</h3>
             <a href="{{ url_for('patients') }}" class="text-xs font-bold text-emerald-400 hover:underline">Lihat Semua →</a>
           </div>
           <div class="table-wrap">
@@ -2237,7 +2238,7 @@ def antrian():
                       {% endif %}
                     </td>
                     <td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td>
-                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">🏥 Periksa</a></td>
+                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">KLINIK Periksa</a></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -2316,7 +2317,7 @@ def antrian_old():
                     <td class="mono">{{ p['nomor_rekam_medis'] }}</td>
                     <td>{{ p['dokter_tujuan'] or '-' }}</td>
                     <td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td>
-                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">🏥 Periksa</a></td>
+                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">KLINIK Periksa</a></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -2557,7 +2558,7 @@ def patients():
             <button class="btn btn-primary py-2">🔍 Filter</button>
             <a class="btn py-2" href="{{ url_for('patients') }}">↻ Reset</a>
             {% if current_user['role'] in ['superadmin','admin'] %}
-            <a class="btn btn-primary py-2" href="{{ url_for('patient_new') }}">➕ Baru</a>
+            <a class="btn btn-primary py-2" href="{{ url_for('patient_new') }}">+ Baru</a>
             <a class="btn py-2" href="{{ url_for('patients_deleted') }}">🗂️ Arsip</a>
             {% endif %}
           </div>
@@ -2615,7 +2616,7 @@ def patients():
                 <td class="px-4 py-3 text-right">
                   <div class="flex gap-1.5 justify-end flex-nowrap">
                     <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_detail', patient_id=p['id']) }}" title="Detail">🔍</a>
-                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="History">📋</a>
+                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="History">[DATA]</a>
                     <form method="post" action="{{ url_for('patient_detail', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Antrikan {{ p['nama_pasien'] }}?')">
                       <input type="hidden" name="action" value="add_to_queue">
                       <button class="btn btn-sm btn-primary text-[10px] px-2 py-1" title="Antrikan">🚶</button>
@@ -3018,7 +3019,7 @@ def patient_detail(patient_id):
           <div class="flex gap-2 no-print">
             <form method="post" onsubmit="return confirm('Antrikan pasien ini?')">
               <input type="hidden" name="action" value="add_to_queue">
-              <button class="btn btn-sm btn-primary">➕ Antrikan</button>
+              <button class="btn btn-sm btn-primary">+ Antrikan</button>
             </form>
             
             <a class="btn btn-sm" href="{{ url_for('patient_new', edit=patient['id']) }}">✏️ Edit</a>
@@ -3066,7 +3067,7 @@ def patient_detail(patient_id):
           <div class="flex justify-between text-[8px] text-slate-500 mt-1">
             <span class="{% if p_steps|length >= 1 %}text-emerald-400{% endif %}">📝 Daftar</span>
             <span class="{% if p_steps|length >= 2 %}text-emerald-400{% endif %}">🚶 Antri</span>
-            <span class="{% if p_steps|length >= 3 %}text-emerald-400{% endif %}">🩺 Periksa</span>
+            <span class="{% if p_steps|length >= 3 %}text-emerald-400{% endif %}">[MEDIS] Periksa</span>
             <span class="{% if p_steps|length >= 4 %}text-emerald-400{% endif %}">📁 Upload</span>
             <span class="{% if p_steps|length >= 5 %}text-emerald-400{% endif %}">💳 Bayar</span>
             <span class="{% if p_steps|length >= 6 %}text-emerald-400{% endif %}">✅ Selesai</span>
@@ -3123,7 +3124,7 @@ def patient_detail(patient_id):
               </div>
               <div class="p-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center">
                 <label class="flex items-center gap-2 cursor-pointer text-xs mb-0"><input type="checkbox" name="informed_consent" required> Informed Consent Disetujui Pasien</label>
-                <button class="btn btn-primary">🩺 Simpan Rekam Medis</button>
+                <button class="btn btn-primary">[MEDIS] Simpan Rekam Medis</button>
               </div>
             </form>
           </div>
@@ -3238,7 +3239,7 @@ def patient_detail(patient_id):
             <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Link Hasil Pasien</h3>
             {% if qr_uri %}<img src="{{ qr_uri }}" class="mx-auto w-32 h-32 p-2 bg-white rounded-2xl shadow-xl">{% endif %}
             <div class="mono text-[10px] break-all bg-black/20 p-2 rounded-lg text-slate-400">{{ public_url }}</div>
-            <button class="btn btn-sm w-full justify-center" onclick="navigator.clipboard.writeText('{{ public_url }}');alert('Link disalin')">📋 Salin Link WA</button>
+            <button class="btn btn-sm w-full justify-center" onclick="navigator.clipboard.writeText('{{ public_url }}');alert('Link disalin')">[DATA] Salin Link WA</button>
           </div>
         </div>
       </div>
@@ -3813,7 +3814,7 @@ def panduan_dokter():
     body = """
     <div class="hero card mb-6">
         <div>
-            <h3 class="text-2xl font-bold text-white mb-2">👨‍⚕️ SOP Panduan Dokter</h3>
+            <h3 class="text-2xl font-bold text-white mb-2">[DOKTER] SOP Panduan Dokter</h3>
             <div class="text-slate-400">Panduan standar pelayanan medis dan penggunaan fitur USG 4D.</div>
         </div>
     </div>
@@ -3855,7 +3856,7 @@ def panduan_dokter():
 @role_required('superadmin', 'admin', 'dokter')
 def sop_page():
     body = """
-    <div class="hero card"><div><h3 style="margin:0">SOP Operasional Klinik USG</h3><div class="muted">Panduan ringkas alur kerja admin dan dokter.</div></div><a class="btn btn-primary no-print" href="{{ url_for('patient_new') }}">➕ Input Pasien</a></div>
+    <div class="hero card"><div><h3 style="margin:0">SOP Operasional Klinik USG</h3><div class="muted">Panduan ringkas alur kerja admin dan dokter.</div></div><a class="btn btn-primary no-print" href="{{ url_for('patient_new') }}">+ Input Pasien</a></div>
     <div class="g2 grid" style="margin-top:16px">
       <div class="card"><h3>1. Registrasi Pasien</h3><ul><li>Input identitas minimal: nama, HP, umur/tanggal lahir, layanan.</li><li>Pilih dokter tujuan dan status awal <strong>menunggu</strong>.</li><li>Pastikan No. RM unik atau gunakan auto-generate.</li></ul></div>
       <div class="card"><h3>2. Pemeriksaan Dokter</h3><ul><li>Buka detail pasien dari daftar antrian.</li><li>Isi SOAP: Subjective, Objective, Assessment, Plan.</li><li>Lengkapi data USG: usia kehamilan, DJJ, posisi janin, EBJ.</li></ul></div>
@@ -4025,7 +4026,7 @@ def settings():
             <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('golongan_darah','A,B,AB,O') }}</div>
           </div>
           <div>
-            <label>🏥 Jenis Layanan</label>
+            <label>KLINIK Jenis Layanan</label>
             <input class="input" name="jenis_layanan" value="{{ master_opts.get('jenis_layanan','Umum,BPJS,Asuransi') }}" placeholder="Umum,BPJS,Asuransi">
             <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('jenis_layanan','') }}</div>
           </div>
