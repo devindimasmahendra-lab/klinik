@@ -125,6 +125,16 @@ def close_db(e=None):
     if db_conn is not None:
         db_conn.close()
 
+# [FIX] Pastikan DB ter-inisialisasi untuk semua environment (termasuk Gunicorn/Render)
+_db_initialized = False
+
+@app.before_request
+def ensure_db():
+    global _db_initialized
+    if not _db_initialized:
+        init_db()
+        _db_initialized = True
+
 def now():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -2033,7 +2043,6 @@ def dashboard():
           type: 'line',
           data: {
             labels: {{ daily_labels|tojson }},
-            labels: {{ daily_labels|tojson }},
             datasets: [{
               label: 'Pasien Baru',
               data: {{ daily_values|tojson }},
@@ -2543,7 +2552,7 @@ def patients():
       </div>
     </div>
     '''
-    return render_page('Data Pasien', body, q=q, status=status, doctor=doctor, from_date=from_date, to_date=to_date, sort_by=sort_by,
+    return render_page('Data Pasien', body, q=q, status=status, doctor=doctor, from_date=from_date, to_date=to_date, sort_by=sort_by, end_count=end_count,
                        doctors=doctors, rows=rows, total=total, page=page, total_pages=total_pages, pages_range=pages_range,
                        offset=offset, per_page=per_page, fmt_dt=fmt_dt)
 
@@ -3955,6 +3964,7 @@ def e413(e):
 
 
 if __name__ == '__main__':
+    init_db()  # [FIX] Inisialisasi database sebelum server jalan
     port = get_port()
     print('=' * 66)
     print(APP_NAME + ' siap dijalankan')
