@@ -2069,6 +2069,135 @@ def antrian():
     return render_page('Antrian Hari Ini', body, rows=rows, fmt_dt=fmt_dt)
 
 
+@app.route('/antrian-tv')
+@role_required('superadmin', 'admin', 'dokter')
+def antrian_tv():
+    conn = get_db(); cur = conn.cursor()
+    # Pasien yang sedang diperiksa (Panggilan Utama)
+    cur.execute("SELECT nama_pasien, dokter_tujuan FROM patients WHERE status_antrian='diperiksa' ORDER BY updated_at DESC LIMIT 1")
+    current = cur.fetchone()
+    
+    # Daftar Antrian Menunggu (5 Pasien Berikutnya)
+    cur.execute("SELECT nama_pasien, nomor_rekam_medis FROM patients WHERE status_antrian='menunggu' ORDER BY created_at ASC LIMIT 5")
+    waiting = cur.fetchall()
+    
+    # Statistik Cepat
+    cur.execute("SELECT COUNT(*) FROM patients WHERE date(created_at) = date('now')")
+    total_today = cur.fetchone()[0]
+
+    body_tpl = """
+    <!doctype html>
+    <html lang="id">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Display Antrian - {{ app_name }}</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&display=swap');
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background: #07111f;
+            background-image: radial-gradient(circle at top right, rgba(34,197,94,0.1), transparent), 
+                              radial-gradient(circle at bottom left, rgba(14,165,233,0.1), transparent);
+        }
+      </style>
+    </head>
+    <body class="min-h-screen text-white p-10 flex flex-col gap-10 overflow-hidden">
+        <header class="flex justify-between items-center bg-white/5 p-8 rounded-[2.5rem] border border-white/10 backdrop-blur-2xl shadow-2xl">
+            <div class="flex items-center gap-6">
+                <div class="w-20 h-20 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-3xl flex items-center justify-center text-4xl font-black shadow-lg">USG</div>
+                <div>
+                    <h1 class="text-5xl font-black tracking-tight leading-tight">DISPLAY ANTRIAN</h1>
+                    <p class="text-emerald-400 font-bold uppercase tracking-[0.3em] text-sm">Klinik Arissa &bull; USG 4D Premium</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <div id="tv-clock" class="text-7xl font-black font-mono text-white mb-2">00:00:00</div>
+                <div class="text-slate-400 font-bold uppercase tracking-widest text-lg">{{ today_label }}</div>
+            </div>
+        </header>
+
+        <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <!-- KIRI: PASIEN YANG DIPANGGIL -->
+            <div class="lg:col-span-7 flex flex-col gap-8">
+                <div class="flex-1 bg-gradient-to-br from-emerald-600/10 to-emerald-900/30 border-2 border-emerald-500/20 rounded-[4rem] p-16 flex flex-col items-center justify-center text-center shadow-2xl relative">
+                    <div class="absolute top-10 left-10 px-8 py-3 bg-emerald-500 text-slate-950 rounded-full font-black text-lg tracking-[0.2em] animate-pulse shadow-lg shadow-emerald-500/20">SEDANG DIPERIKSA</div>
+                    
+                    {% if current %}
+                        <div class="text-slate-400 text-2xl font-bold uppercase tracking-[0.3em] mb-6">NAMA PASIEN</div>
+                        <h2 class="text-8xl md:text-9xl font-black text-white mb-10 drop-shadow-2xl">{{ current['nama_pasien'] }}</h2>
+                        <div class="w-48 h-2 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full mb-10 opacity-50"></div>
+                        <div class="text-slate-400 text-xl font-bold uppercase tracking-[0.3em] mb-4">DOKTER TUJUAN</div>
+                        <div class="text-5xl font-extrabold text-cyan-400 bg-cyan-400/10 px-8 py-4 rounded-3xl border border-cyan-400/20">{{ current['dokter_tujuan'] or '-' }}</div>
+                    {% else %}
+                        <div class="text-slate-500 text-4xl font-bold italic opacity-50">Menunggu Pasien Berikutnya...</div>
+                    {% endif %}
+                </div>
+                
+                <div class="bg-white/5 border border-white/10 rounded-[3rem] p-10 flex justify-around items-center shadow-xl">
+                    <div class="text-center">
+                        <div class="text-slate-500 text-sm font-black uppercase tracking-[0.3em] mb-2">Total Pasien</div>
+                        <div class="text-7xl font-black text-white">{{ total_today }}</div>
+                    </div>
+                    <div class="w-px h-24 bg-white/10"></div>
+                    <div class="text-center">
+                        <div class="text-slate-500 text-sm font-black uppercase tracking-[0.3em] mb-2">Daftar Tunggu</div>
+                        <div class="text-7xl font-black text-amber-500">{{ waiting|length }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KANAN: DAFTAR ANTRIAN BERIKUTNYA -->
+            <div class="lg:col-span-5 flex flex-col gap-8">
+                <div class="flex-1 bg-white/5 border border-white/10 rounded-[4rem] p-12 backdrop-blur-3xl shadow-2xl overflow-hidden relative">
+                    <h3 class="text-3xl font-black mb-10 px-2 flex items-center gap-4 text-cyan-400">
+                        <span class="w-3 h-10 bg-cyan-500 rounded-full shadow-lg shadow-cyan-500/50"></span>
+                        ANTRIAN BERIKUTNYA
+                    </h3>
+                    
+                    <div class="space-y-6">
+                        {% for p in waiting %}
+                        <div class="flex items-center gap-8 p-8 bg-white/5 border border-white/5 rounded-[2.5rem] group hover:bg-emerald-500/10 hover:border-emerald-500/20 transition-all duration-300">
+                            <div class="w-24 h-24 bg-slate-800 rounded-3xl flex items-center justify-center text-4xl font-black text-cyan-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all shadow-xl">
+                                {{ loop.index }}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-3xl font-black text-white truncate mb-1 group-hover:text-emerald-400 transition-colors">{{ p['nama_pasien'] }}</div>
+                                <div class="text-slate-500 font-mono text-lg tracking-tighter">{{ p['nomor_rekam_medis'] }}</div>
+                            </div>
+                        </div>
+                        {% else %}
+                            <div class="py-32 text-center text-slate-600 italic text-2xl">Semua antrian selesai</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center py-6 text-slate-600 font-bold uppercase tracking-[0.5em] text-[10px] animate-pulse">
+            Sistem Informasi Layanan Terpadu &bull; Klinik Arissa Premium Service
+        </footer>
+
+        <script>
+            function updateClock() {
+                const now = new Date();
+                const h = String(now.getHours()).padStart(2, '0');
+                const m = String(now.getMinutes()).padStart(2, '0');
+                const s = String(now.getSeconds()).padStart(2, '0');
+                document.getElementById('tv-clock').textContent = h + ":" + m + ":" + s;
+            }
+            setInterval(updateClock, 1000); updateClock();
+            // Refresh halaman otomatis setiap 20 detik
+            setTimeout(() => { location.reload(); }, 20000);
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(body_tpl, current=current, waiting=waiting, total_today=total_today, 
+                                 today_label=datetime.now().strftime("%A, %d %B %Y"), app_name=APP_NAME)
+
+
 @app.route('/patients')
 @role_required('superadmin', 'admin', 'dokter')
 def patients():
