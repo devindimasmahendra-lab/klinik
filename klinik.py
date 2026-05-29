@@ -47,22 +47,8 @@ except Exception:
 
 APP_NAME = 'Klinik USG 4D'
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
-# Konfigurasi Penyimpanan untuk Render (Persistent Disk)
-DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
-if os.environ.get('RENDER'):
-    # Gunakan /var/lib/data hanya jika disk sudah dipasang di dashboard Render.
-    # Jika belum ada disk terpasang, gunakan folder lokal agar tidak muncul PermissionError.
-    render_disk = '/var/lib/data'
-    if os.path.exists(render_disk):
-        DATA_DIR = render_disk
-    else:
-        DATA_DIR = os.path.join(BASE_DIR, 'instance_data')
-
-os.makedirs(DATA_DIR, exist_ok=True)
-
-DB_PATH = os.path.join(DATA_DIR, 'usg4d_klinik.db')
-UPLOAD_DIR = os.path.join(DATA_DIR, 'uploads')
+DB_PATH = os.path.join(BASE_DIR, 'usg4d_klinik.db')
+UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 ALLOWED = {'jpg', 'jpeg', 'png', 'pdf', 'mp4', 'mov'}
 MAX_MB = 32
 DEFAULT_PORT = 5006
@@ -72,7 +58,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change-this-secret')
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 
 # Setup Logging for long-term stability
@@ -210,8 +196,7 @@ def rm_auto():
 
 def get_port():
     try:
-        # Render menggunakan variabel lingkungan 'PORT'
-        return int(os.environ.get('PORT', os.environ.get('KLINIK_PORT', DEFAULT_PORT)))
+        return int(os.environ.get('KLINIK_PORT', DEFAULT_PORT))
     except ValueError:
         return DEFAULT_PORT
 
