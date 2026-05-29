@@ -323,6 +323,18 @@ def init_db():
             cur.execute('ALTER TABLE {} ADD COLUMN {}'.format(tbl, col) + ' ' + typ)
         except sqlite3.OperationalError:
             pass  # kolom sudah ada
+    # Migrasi kolom antropometri untuk tabel patients
+    for col, typ in [('tinggi_badan', 'REAL'), ('berat_badan', 'REAL'), ('lingkar_perut', 'REAL'), ('bmi', 'REAL')]:
+        try:
+            cur.execute('ALTER TABLE patients ADD COLUMN {} {}'.format(col, typ))
+        except sqlite3.OperationalError:
+            pass  # kolom sudah ada
+    # Migrasi kolom soft-delete
+    for col, typ in [('deleted', 'INTEGER NOT NULL DEFAULT 0'), ('deleted_at', 'TEXT'), ('deleted_by', 'INTEGER'), ('restored_at', 'TEXT')]:
+        try:
+            cur.execute('ALTER TABLE patients ADD COLUMN {} {}'.format(col, typ))
+        except sqlite3.OperationalError:
+            pass  # kolom sudah ada
     conn.commit()
     conn.close()
 
@@ -2042,11 +2054,18 @@ def patients():
     q = request.args.get('q', '').strip()
     status = request.args.get('status', '').strip()
     doctor = request.args.get('doctor', '').strip()
+    from_date = request.args.get('from_date', '').strip()
+    to_date = request.args.get('to_date', '').strip()
+    sort_by = request.args.get('sort_by', 'newest').strip()
     page = request.args.get('page', 1, type=int)
     per_page = 20
+    
     conn = db(); cur = conn.cursor()
+    # Hanya ambil kolom yang diperlukan, bukan SELECT * — lebih cepat & hemat memori
+    select_cols = "id, nama_pasien, nomor_rekam_medis, nik, nomor_hp, jenis_layanan, dokter_tujuan, status_antrian, created_at, tanggal_lahir, umur"
     cur.execute("SELECT full_name,username FROM users WHERE role='dokter' AND active=1 ORDER BY full_name,username"); doctors = cur.fetchall()
-    where = 'WHERE 1=1'; params = []
+    
+    where = 'WHERE deleted=0'; params = []
     if q:
         like = '%' + q + '%'
         where += ' AND (nama_pasien LIKE ? OR nomor_rekam_medis LIKE ? OR nik LIKE ? OR nomor_hp LIKE ?)'
@@ -2055,21 +2074,189 @@ def patients():
         where += ' AND status_antrian=?'; params.append(status)
     if doctor:
         where += ' AND dokter_tujuan=?'; params.append(doctor)
-    order = " ORDER BY CASE status_antrian WHEN 'menunggu' THEN 1 WHEN 'diperiksa' THEN 2 ELSE 3 END, created_at DESC"
+    if from_date:
+        where += ' AND date(created_at) >= ?'; params.append(from_date)
+    if to_date:
+        where += ' AND date(created_at) <= ?'; params.append(to_date)
+    
+    if sort_by == 'oldest':
+        order = " ORDER BY created_at ASC"
+    elif sort_by == 'name':
+        order = " ORDER BY nama_pasien ASC"
+    else:
+        order = " ORDER BY CASE status_antrian WHEN 'menunggu' THEN 1 WHEN 'diperiksa' THEN 2 ELSE 3 END, created_at DESC"
+    
+    # COUNT query — cepat karena hanya hitung jumlah baris
     cur.execute('SELECT COUNT(*) FROM patients ' + where, tuple(params))
     total = cur.fetchone()[0]
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
     offset = (page - 1) * per_page
-    sql = 'SELECT * FROM patients ' + where + order + ' LIMIT ? OFFSET ?'
+    
+    # DATA query — hanya ambil 20 baris + kolom minimal
+    sql = 'SELECT ' + select_cols + ' FROM patients ' + where + order + ' LIMIT ? OFFSET ?'
     cur.execute(sql, tuple(params) + (per_page, offset)); rows = cur.fetchall(); conn.close()
+    
+    # Hitung end_count untuk display (hindari min() yang tidak ada di Jinja2)
+    end_count = offset + per_page
+    if end_count > total:
+        end_count = total
+    
+    # Hitung rentang halaman untuk pagination compact
+    max_visible = 7
+    half = max_visible // 2
+    start_page = max(1, page - half)
+    end_page = min(total_pages, page + half)
+    if end_page - start_page < max_visible - 1:
+        if start_page == 1:
+            end_page = min(total_pages, start_page + max_visible - 1)
+        else:
+            start_page = max(1, end_page - max_visible + 1)
+    pages_range = list(range(start_page, end_page + 1))
+    
     body = '''
-    <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari nama / RM / NIK / HP..."><select class="select" name="status"><option value="">Semua status</option>{% for s in ['menunggu','diperiksa','selesai'] %}<option value="{{ s }}" {{ 'selected' if status==s else '' }}>{{ s }}</option>{% endfor %}</select><select class="select" name="doctor"><option value="">Semua dokter</option>{% for d in doctors %}{% set dn = d['full_name'] or d['username'] %}<option value="{{ dn }}" {{ 'selected' if doctor==dn else '' }}>{{ dn }}</option>{% endfor %}</select><button class="btn btn-primary">🔍 Filter</button>{% if current_user['role'] in ['superadmin','admin'] %}<a class="btn" href="{{ url_for('patient_new') }}">➕ Pasien Baru</a>{% endif %}</form></div>
-    <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar Pasien</h3><span class="badge">{{ total }} data • Hal {{ page }}/{{ total_pages }}</span></div>{% if rows %}<table><thead><tr><th>Pasien</th><th>RM</th><th>Layanan</th><th>Dokter</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{% for p in rows %}<tr><td><strong>{{ p['nama_pasien'] }}</strong><div class="small muted">NIK: {{ p['nik'] or '-' }} • HP: {{ p['nomor_hp'] or '-' }}</div></td><td>{{ p['nomor_rekam_medis'] }}</td><td>{{ p['jenis_layanan'] or '-' }}</td><td>{{ p['dokter_tujuan'] or '-' }}</td><td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td><td><div class="toolbar"><a class="btn btn-sm" href="{{ url_for('patient_detail', patient_id=p['id']) }}">Buka</a><a class="btn btn-sm" href="{{ url_for('patient_history', patient_id=p['id']) }}">History</a><form method="post" action="{{ url_for('patient_detail', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Antrikan pasien ini?')"><input type="hidden" name="action" value="add_to_queue"><button class="btn btn-sm btn-primary">➕ Antrikan</button></form></div></td></tr>{% endfor %}</tbody></table>
-    <div class="toolbar" style="justify-content:center;margin-top:14px">{% if page > 1 %}<a class="btn btn-sm" href="?page={{ page-1 }}&q={{ q }}&status={{ status }}&doctor={{ doctor }}">⬅ Sebelumnya</a>{% endif %}<span class="badge">Halaman {{ page }} dari {{ total_pages }}</span>{% if page < total_pages %}<a class="btn btn-sm" href="?page={{ page+1 }}&q={{ q }}&status={{ status }}&doctor={{ doctor }}">Berikutnya ➡</a>{% endif %}</div>
-    {% else %}<div class="empty">Tidak ada data pasien.</div>{% endif %}</div>
+    <div class="space-y-4">
+      <!-- Filter Card -->
+      <div class="card no-print">
+        <form class="space-y-3" id="filterForm">
+          <div class="flex flex-wrap gap-2 items-end">
+            <div class="flex-1 min-w-[180px]">
+              <label class="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">🔍 Cari Pasien</label>
+              <input class="input py-2" name="q" value="{{ q }}" placeholder="Nama / RM / NIK / No. HP...">
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">Status</label>
+              <select class="select py-2" name="status">
+                <option value="">Semua Status</option>
+                {% for s in ['menunggu','diperiksa','selesai'] %}<option value="{{ s }}" {{ 'selected' if status==s else '' }}>{{ s }}</option>{% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">Dokter</label>
+              <select class="select py-2" name="doctor">
+                <option value="">Semua Dokter</option>
+                {% for d in doctors %}{% set dn = d['full_name'] or d['username'] %}<option value="{{ dn }}" {{ 'selected' if doctor==dn else '' }}>{{ dn }}</option>{% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">Urutkan</label>
+              <select class="select py-2" name="sort_by">
+                <option value="newest" {{ 'selected' if sort_by=='newest' else '' }}>Terbaru</option>
+                <option value="oldest" {{ 'selected' if sort_by=='oldest' else '' }}>Terlama</option>
+                <option value="name" {{ 'selected' if sort_by=='name' else '' }}>Nama A-Z</option>
+              </select>
+            </div>
+            <button class="btn btn-primary py-2">🔍 Filter</button>
+            <a class="btn py-2" href="{{ url_for('patients') }}">↻ Reset</a>
+            {% if current_user['role'] in ['superadmin','admin'] %}
+            <a class="btn btn-primary py-2" href="{{ url_for('patient_new') }}">➕ Baru</a>
+            <a class="btn py-2" href="{{ url_for('patients_deleted') }}">🗂️ Arsip</a>
+            {% endif %}
+          </div>
+          <!-- Date Filter (collapsible) -->
+          <div class="flex flex-wrap gap-2 items-end border-t border-white/5 pt-2">
+            <div>
+              <label class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Dari</label>
+              <input class="input py-1.5" type="date" name="from_date" value="{{ from_date }}">
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Sampai</label>
+              <input class="input py-1.5" type="date" name="to_date" value="{{ to_date }}">
+            </div>
+            <div class="text-[11px] text-slate-500 ml-auto">
+              {% if total > 0 %}
+              Menampilkan {{ offset+1 }}-{{ end_count }} dari <strong class="text-white">{{ total }}</strong> pasien
+              {% endif %}
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Data Table -->
+      <div class="card p-0 overflow-hidden">
+        {% if rows %}
+        <div class="table-wrap">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-white/5 text-slate-400 uppercase text-[10px] tracking-widest border-b border-white/10">
+                <th class="px-4 py-3 text-left w-8">#</th>
+                <th class="px-4 py-3 text-left min-w-[140px]">Pasien</th>
+                <th class="px-4 py-3 text-left">RM</th>
+                <th class="px-4 py-3 text-left hidden md:table-cell">HP / NIK</th>
+                <th class="px-4 py-3 text-left hidden md:table-cell">Layanan</th>
+                <th class="px-4 py-3 text-left hidden lg:table-cell">Dokter</th>
+                <th class="px-4 py-3 text-center">Status</th>
+                <th class="px-4 py-3 text-right min-w-[120px]">Aksi</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              {% for p in rows %}
+              <tr class="hover:bg-white/5 transition-colors">
+                <td class="px-4 py-3 text-xs text-slate-500">{{ offset + loop.index }}</td>
+                <td class="px-4 py-3">
+                  <div class="font-bold text-white text-sm">{{ p['nama_pasien'] }}</div>
+                  <div class="text-[10px] text-slate-500">{{ fmt_dt(p['created_at']) }}</div>
+                </td>
+                <td class="px-4 py-3 font-mono text-xs text-slate-300">{{ p['nomor_rekam_medis'] }}</td>
+                <td class="px-4 py-3 text-xs text-slate-400 hidden md:table-cell">{{ p['nomor_hp'] or '-' }}<br><span class="text-[10px]">{{ p['nik'] or '' }}</span></td>
+                <td class="px-4 py-3 text-xs hidden md:table-cell">{{ p['jenis_layanan'] or '-' }}</td>
+                <td class="px-4 py-3 text-xs hidden lg:table-cell">{{ p['dokter_tujuan'] or '-' }}</td>
+                <td class="px-4 py-3 text-center">
+                  <span class="pill text-[10px] {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <div class="flex gap-1.5 justify-end flex-nowrap">
+                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_detail', patient_id=p['id']) }}" title="Detail">🔍</a>
+                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="History">📋</a>
+                    <form method="post" action="{{ url_for('patient_detail', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Antrikan {{ p['nama_pasien'] }}?')">
+                      <input type="hidden" name="action" value="add_to_queue">
+                      <button class="btn btn-sm btn-primary text-[10px] px-2 py-1" title="Antrikan">🚶</button>
+                    </form>
+                    {% if current_user['role'] == 'superadmin' %}
+                    <form method="post" action="{{ url_for('patient_delete', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Hapus {{ p['nama_pasien'] }}?')">
+                      <button class="btn btn-sm bg-red-600/20 text-red-400 border-red-500/30 text-[10px] px-2 py-1" title="Hapus">🗑️</button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="flex flex-wrap items-center justify-center gap-1.5 px-4 py-4 border-t border-white/5 bg-white/5">
+          <!-- First -->
+          <a class="btn btn-sm text-[10px] px-2 py-1 {{ 'opacity-40 pointer-events-none' if page==1 }}" href="?page=1&q={{ q }}&status={{ status }}&doctor={{ doctor }}&sort_by={{ sort_by }}&from_date={{ from_date }}&to_date={{ to_date }}">««</a>
+          <!-- Prev -->
+          <a class="btn btn-sm text-[10px] px-2 py-1 {{ 'opacity-40 pointer-events-none' if page==1 }}" href="?page={{ page-1 }}&q={{ q }}&status={{ status }}&doctor={{ doctor }}&sort_by={{ sort_by }}&from_date={{ from_date }}&to_date={{ to_date }}">«</a>
+          <!-- Pages -->
+          {% for pn in pages_range %}
+          <a class="btn btn-sm text-[10px] px-3 py-1 {{ 'btn-primary' if pn==page else '' }}" href="?page={{ pn }}&q={{ q }}&status={{ status }}&doctor={{ doctor }}&sort_by={{ sort_by }}&from_date={{ from_date }}&to_date={{ to_date }}">{{ pn }}</a>
+          {% endfor %}
+          <!-- Next -->
+          <a class="btn btn-sm text-[10px] px-2 py-1 {{ 'opacity-40 pointer-events-none' if page==total_pages }}" href="?page={{ page+1 }}&q={{ q }}&status={{ status }}&doctor={{ doctor }}&sort_by={{ sort_by }}&from_date={{ from_date }}&to_date={{ to_date }}">»</a>
+          <!-- Last -->
+          <a class="btn btn-sm text-[10px] px-2 py-1 {{ 'opacity-40 pointer-events-none' if page==total_pages }}" href="?page={{ total_pages }}&q={{ q }}&status={{ status }}&doctor={{ doctor }}&sort_by={{ sort_by }}&from_date={{ from_date }}&to_date={{ to_date }}">»»</a>
+          <!-- Info -->
+          <span class="text-[10px] text-slate-500 ml-2">Hal {{ page }}/{{ total_pages }}</span>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="flex flex-col items-center justify-center py-20 text-slate-500">
+          <div class="text-4xl mb-3">📭</div>
+          <div class="font-medium">Tidak ada data pasien ditemukan</div>
+          <div class="text-xs mt-1">Coba ubah kata kunci atau filter pencarian</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
     '''
-    return render_page('Data Pasien', body, q=q, status=status, doctor=doctor, doctors=doctors, rows=rows, total=total, page=page, total_pages=total_pages)
+    return render_page('Data Pasien', body, q=q, status=status, doctor=doctor, from_date=from_date, to_date=to_date, sort_by=sort_by,
+                       doctors=doctors, rows=rows, total=total, page=page, total_pages=total_pages, pages_range=pages_range,
+                       offset=offset, per_page=per_page, fmt_dt=fmt_dt)
 
 
 @app.route('/patients/new', methods=['GET', 'POST'])
@@ -2101,9 +2288,9 @@ def patient_new():
         elif edit_pid:
             # UPDATE existing patient
             try:
-                cur.execute('''UPDATE patients SET nama_pasien=?,nomor_rekam_medis=?,nik=?,tanggal_lahir=?,umur=?,alamat=?,nomor_hp=?,golongan_darah=?,status_perkawinan=?,pekerjaan=?,nama_keluarga=?,jenis_layanan=?,dokter_tujuan=?,prioritas=?,status_antrian=?,updated_at=?
+                cur.execute('''UPDATE patients SET nama_pasien=?,nomor_rekam_medis=?,nik=?,tanggal_lahir=?,umur=?,alamat=?,nomor_hp=?,golongan_darah=?,status_perkawinan=?,pekerjaan=?,nama_keluarga=?,jenis_layanan=?,dokter_tujuan=?,prioritas=?,status_antrian=?,tinggi_badan=?,berat_badan=?,lingkar_perut=?,bmi=?,updated_at=?
                                WHERE id=?''',
-                            (nama, rm, f.get('nik','').strip(), f.get('tanggal_lahir','').strip(), f.get('umur','').strip(), f.get('alamat','').strip(), f.get('nomor_hp','').strip(), f.get('golongan_darah','').strip(), f.get('status_perkawinan','').strip(), f.get('pekerjaan','').strip(), f.get('nama_keluarga','').strip(), f.get('jenis_layanan','').strip(), f.get('dokter_tujuan','').strip(), f.get('prioritas','Non-urgent').strip(), f.get('status_antrian','menunggu').strip(), now(), int(edit_pid)))
+                            (nama, rm, f.get('nik','').strip(), f.get('tanggal_lahir','').strip(), f.get('umur','').strip(), f.get('alamat','').strip(), f.get('nomor_hp','').strip(), f.get('golongan_darah','').strip(), f.get('status_perkawinan','').strip(), f.get('pekerjaan','').strip(), f.get('nama_keluarga','').strip(), f.get('jenis_layanan','').strip(), f.get('dokter_tujuan','').strip(), f.get('prioritas','Non-urgent').strip(), f.get('status_antrian','menunggu').strip(), f.get('tinggi_badan','') or None, f.get('berat_badan','') or None, f.get('lingkar_perut','') or None, f.get('bmi','') or None, now(), int(edit_pid)))
                 conn.commit()
                 log_action('UPDATE_PATIENT', 'Update pasien #{} {}'.format(edit_pid, nama))
                 flash('Data pasien berhasil diperbarui.', 'success')
@@ -2112,9 +2299,9 @@ def patient_new():
                 flash('Nomor rekam medis sudah digunakan.', 'danger')
         else:
             try:
-                cur.execute('''INSERT INTO patients (nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,prioritas,status_antrian,access_token,created_by,created_at,updated_at)
-                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                            (nama, rm, f.get('nik','').strip(), f.get('tanggal_lahir','').strip(), f.get('umur','').strip(), f.get('alamat','').strip(), f.get('nomor_hp','').strip(), f.get('golongan_darah','').strip(), f.get('status_perkawinan','').strip(), f.get('pekerjaan','').strip(), f.get('nama_keluarga','').strip(), f.get('jenis_layanan','').strip(), f.get('dokter_tujuan','').strip(), f.get('prioritas','Non-urgent').strip(), f.get('status_antrian','menunggu').strip(), token_auto(), current_user()['id'], now(), now()))
+                cur.execute('''INSERT INTO patients (nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,prioritas,status_antrian,tinggi_badan,berat_badan,lingkar_perut,bmi,access_token,created_by,created_at,updated_at)
+                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                            (nama, rm, f.get('nik','').strip(), f.get('tanggal_lahir','').strip(), f.get('umur','').strip(), f.get('alamat','').strip(), f.get('nomor_hp','').strip(), f.get('golongan_darah','').strip(), f.get('status_perkawinan','').strip(), f.get('pekerjaan','').strip(), f.get('nama_keluarga','').strip(), f.get('jenis_layanan','').strip(), f.get('dokter_tujuan','').strip(), f.get('prioritas','Non-urgent').strip(), f.get('status_antrian','menunggu').strip(), f.get('tinggi_badan','') or None, f.get('berat_badan','') or None, f.get('lingkar_perut','') or None, f.get('bmi','') or None, token_auto(), current_user()['id'], now(), now()))
                 conn.commit(); pid = cur.lastrowid
                 log_action('CREATE_PATIENT', 'Tambah pasien #{} {}'.format(pid, nama))
                 flash('Pasien baru berhasil ditambahkan.', 'success')
@@ -2199,6 +2386,15 @@ def patient_new():
               <option value="selesai" {{ 'selected' if edit_patient and edit_patient['status_antrian']=='selesai' else '' }}>selesai</option>
             </select>
           </div>
+          <div style="border-top:1px solid var(--border);grid-column:1/-1;padding-top:10px;margin-top:4px">
+            <div class="small muted font-bold mb-2">📏 DATA ANTROPOMETRI</div>
+            <div class="grid grid-cols-4 gap-3">
+              <div><label class="text-[10px]">Tinggi Badan (cm)</label><input class="input py-1 text-center" type="number" step="0.1" name="tinggi_badan" id="ftinggi" value="{{ edit_patient['tinggi_badan'] if edit_patient else '' }}" oninput="hitungBMI()" placeholder="165"></div>
+              <div><label class="text-[10px]">Berat Badan (kg)</label><input class="input py-1 text-center" type="number" step="0.1" name="berat_badan" id="fberat" value="{{ edit_patient['berat_badan'] if edit_patient else '' }}" oninput="hitungBMI()" placeholder="65"></div>
+              <div><label class="text-[10px]">Lingkar Perut (cm)</label><input class="input py-1 text-center" type="number" step="0.1" name="lingkar_perut" id="fperut" value="{{ edit_patient['lingkar_perut'] if edit_patient else '' }}" placeholder="80"></div>
+              <div><label class="text-[10px]">BMI (otomatis)</label><input class="input py-1 text-center" name="bmi" id="fbmi" value="{{ edit_patient['bmi'] if edit_patient else '' }}" readonly placeholder="22.5"></div>
+            </div>
+          </div>
           <div style="grid-column:1/-1"><label>Alamat</label><textarea class="textarea" name="alamat" id="falamat">{{ edit_patient['alamat'] if edit_patient else '' }}</textarea></div>
         </div>
         <div class="toolbar">
@@ -2225,6 +2421,14 @@ def patient_new():
       }
     }
 
+    function hitungBMI(){
+      var tb=parseFloat(document.getElementById('ftinggi').value)||0;
+      var bb=parseFloat(document.getElementById('fberat').value)||0;
+      if(tb>0&&bb>0){
+        var bmi=bb/((tb/100)*(tb/100));
+        document.getElementById('fbmi').value=bmi.toFixed(1);
+      }
+    }
     function hitungUmur(){
       var tgl=document.getElementById('ftgl').value;
       if(!tgl) return;
@@ -2423,6 +2627,43 @@ def patient_detail(patient_id):
           <div><span class="text-slate-500 block mb-1">LAYANAN / GOLDAR</span><span class="text-slate-200 font-bold">{{ patient['jenis_layanan'] or '-' }} / {{ patient['golongan_darah'] or '-' }}</span></div>
           <div><span class="text-slate-500 block mb-1">NAMA KELUARGA</span><span class="text-slate-200 font-bold">{{ patient['nama_keluarga'] or '-' }}</span></div>
           <div><span class="text-slate-500 block mb-1">DOKTER TUJUAN</span><span class="text-slate-200 font-bold text-sky-400">{{ patient['dokter_tujuan'] or '-' }}</span></div>
+        </div>
+        <!-- Antropometri -->
+        <div class="grid grid-cols-4 gap-4 mt-2 pt-3 border-t border-white/5 text-xs">
+          <div><span class="text-slate-500 block mb-1">TB (cm)</span><span class="text-slate-200 font-bold">{{ "%.1f"|format(patient['tinggi_badan']) if patient['tinggi_badan'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">BB (kg)</span><span class="text-slate-200 font-bold">{{ "%.1f"|format(patient['berat_badan']) if patient['berat_badan'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">Lingkar Perut (cm)</span><span class="text-slate-200 font-bold">{{ "%.1f"|format(patient['lingkar_perut']) if patient['lingkar_perut'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">BMI</span><span class="text-slate-200 font-bold {% if patient['bmi'] and (patient['bmi']<18.5 or patient['bmi']>=25) %}text-amber-400{% else %}text-emerald-400{% endif %}">{{ "%.1f"|format(patient['bmi']) if patient['bmi'] else '-' }}</span></div>
+        </div>
+        <!-- Progress Bar Alur Klinik -->
+        {% set s_antrian = patient['status_antrian'] %}
+        {% set upload_count = files|length %}
+        {% set billing_count = bills|length %}
+        {% set soap_count = soaps|length %}
+        {% set p_steps = [] %}
+        {% if patient and patient['id'] %}{% set _ = p_steps.append(1) %}{% endif %}
+        {% if s_antrian in ('menunggu','diperiksa','selesai') %}{% set _ = p_steps.append(1) %}{% endif %}
+        {% if s_antrian in ('diperiksa','selesai') and soap_count > 0 %}{% set _ = p_steps.append(1) %}{% endif %}
+        {% if upload_count > 0 %}{% set _ = p_steps.append(1) %}{% endif %}
+        {% if billing_count > 0 %}{% set _ = p_steps.append(1) %}{% endif %}
+        {% if s_antrian == 'selesai' %}{% set _ = p_steps.append(1) %}{% endif %}
+        {% set pct = (p_steps|length / 6 * 100)|int %}
+        <div class="mt-4 pt-3 border-t border-white/5">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Progress Alur Klinik</span>
+            <span class="text-[10px] font-bold text-emerald-400">{{ pct }}%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500" style="width:{{ pct }}%"></div>
+          </div>
+          <div class="flex justify-between text-[8px] text-slate-500 mt-1">
+            <span class="{% if p_steps|length >= 1 %}text-emerald-400{% endif %}">📝 Daftar</span>
+            <span class="{% if p_steps|length >= 2 %}text-emerald-400{% endif %}">🚶 Antri</span>
+            <span class="{% if p_steps|length >= 3 %}text-emerald-400{% endif %}">🩺 Periksa</span>
+            <span class="{% if p_steps|length >= 4 %}text-emerald-400{% endif %}">📁 Upload</span>
+            <span class="{% if p_steps|length >= 5 %}text-emerald-400{% endif %}">💳 Bayar</span>
+            <span class="{% if p_steps|length >= 6 %}text-emerald-400{% endif %}">✅ Selesai</span>
+          </div>
         </div>
       </div>
 
@@ -2864,12 +3105,71 @@ def patient_file_public(token, upload_id):
 @app.route('/patients/<int:patient_id>/delete', methods=['POST'])
 @role_required('superadmin')
 def patient_delete(patient_id):
+    user = current_user()
     conn = db(); cur = conn.cursor()
-    cur.execute('DELETE FROM patients WHERE id=?', (patient_id,))
+    cur.execute("UPDATE patients SET deleted=1, deleted_at=?, deleted_by=?, status_antrian='selesai' WHERE id=?", (now(), user['id'], patient_id))
     conn.commit(); conn.close()
-    log_action('DELETE_PATIENT', f'Hapus pasien ID #{patient_id}')
-    flash('Data pasien berhasil dihapus secara permanen.', 'success')
+    log_action('SOFT_DELETE_PATIENT', f'Hapus (soft) pasien ID #{patient_id}')
+    flash('Data pasien telah dihapus. Masih bisa dilihat di menu Arsip Pasien.', 'info')
     return redirect(url_for('patients'))
+
+
+@app.route('/patients/deleted')
+@role_required('superadmin', 'admin')
+def patients_deleted():
+    conn = db(); cur = conn.cursor()
+    cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, nik, nomor_hp, deleted_at, deleted_by FROM patients WHERE deleted=1 ORDER BY deleted_at DESC LIMIT 100")
+    rows = cur.fetchall(); conn.close()
+    body = '''
+    <div class="space-y-4">
+      <div class="card">
+        <div class="flex items-center gap-2 mb-4">
+          <h3 class="text-lg font-bold m-0">🗂️ Arsip Pasien (Soft-Delete)</h3>
+          <span class="badge">{{ rows|length }} data</span>
+        </div>
+        <div class="small muted mb-4">Data pasien yang dihapus masih tersimpan dan dapat dikembalikan (restore).</div>
+        {% if rows %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nama</th><th>RM</th><th>NIK / HP</th><th>Dihapus Pada</th><th>Aksi</th></tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr class="text-sm">
+                <td><strong class="text-slate-300">{{ r['nama_pasien'] }}</strong></td>
+                <td class="font-mono text-xs">{{ r['nomor_rekam_medis'] }}</td>
+                <td class="text-xs text-slate-400">{{ r['nik'] or '-' }} / {{ r['nomor_hp'] or '-' }}</td>
+                <td class="text-xs">{{ fmt_dt(r['deleted_at']) }}</td>
+                <td>
+                  <form method="post" action="{{ url_for('patient_restore', patient_id=r['id']) }}" style="display:inline" onsubmit="return confirm('Kembalikan {{ r['nama_pasien'] }}?')">
+                    <button class="btn btn-sm btn-primary">↩ Restore</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12 text-slate-500">Tidak ada data pasien yang dihapus.</div>
+        {% endif %}
+      </div>
+      <a class="btn" href="{{ url_for('patients') }}">⬅ Kembali ke Data Pasien</a>
+    </div>
+    '''
+    return render_page('Arsip Pasien', body, rows=rows, fmt_dt=fmt_dt)
+
+
+@app.route('/patients/<int:patient_id>/restore', methods=['POST'])
+@role_required('superadmin', 'admin')
+def patient_restore(patient_id):
+    conn = db(); cur = conn.cursor()
+    cur.execute("UPDATE patients SET deleted=0, restored_at=?, deleted_by=NULL WHERE id=?", (now(), patient_id))
+    conn.commit(); conn.close()
+    log_action('RESTORE_PATIENT', f'Restore pasien ID #{patient_id}')
+    flash('Data pasien berhasil dikembalikan.', 'success')
+    return redirect(url_for('patients_deleted'))
 
 
 @app.route('/soap/<int:soap_id>/delete', methods=['POST'])
