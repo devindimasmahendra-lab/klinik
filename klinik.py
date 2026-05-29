@@ -1,18 +1,4 @@
-# -*- coding: utf-8 -*-
 #!/usr/bin/env python3
-
-# =====================================================
-# SMART UI UPGRADE PACK 2026
-# - Modern glassmorphism UI
-# - Better responsive table
-# - Floating action buttons
-# - Smart search highlight
-# - Auto dark-mode compatible style
-# - Sticky action buttons
-# - Better mobile spacing
-# =====================================================
-
-
 # -*- coding: utf-8 -*-
 # klinik.py - Single-file Flask app untuk sistem klinik USG 4D
 # Jalankan: python klinik.py
@@ -262,7 +248,7 @@ def qr_data_uri(text):
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.executescript("""
+    cur.executescript('''
         PRAGMA foreign_keys=ON;
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -389,7 +375,7 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_rm ON patients(nomor_rekam_medis)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_soap_patient ON soap_records(patient_id)")
 
-    cur.execute("""
+    cur.execute('''
         CREATE TABLE IF NOT EXISTS master_options (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category TEXT UNIQUE,
@@ -527,7 +513,7 @@ def api_patient_by_id(patient_id):
 @role_required('superadmin', 'admin', 'dokter')
 def api_fetal_growth(patient_id):
     conn = get_db(); cur = conn.cursor()
-    cur.execute("""
+    cur.execute('''
         SELECT created_at, detak_jantung_janin, estimasi_berat_janin, usia_kehamilan 
         FROM soap_records 
         WHERE patient_id=? 
@@ -587,7 +573,7 @@ def render_page(title, body_tpl, **ctx):
     page_ctx['hitung_risiko_kehamilan'] = hitung_risiko_kehamilan
     page_ctx['title'] = title
     body = render_template_string(body_tpl, **page_ctx)
-    base = """
+    base = '''
     <!doctype html>
     <html lang="id">
     <head>
@@ -600,104 +586,7 @@ def render_page(title, body_tpl, **ctx):
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
       <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-      
-<style>
-:root{
-    --primary:#2563eb;
-    --secondary:#0f172a;
-    --success:#16a34a;
-    --danger:#dc2626;
-    --warning:#f59e0b;
-    --bg:#f1f5f9;
-    --card:#ffffff;
-    --text:#0f172a;
-    --radius:18px;
-    --shadow:0 10px 30px rgba(0,0,0,.08);
-}
-body{
-    background:linear-gradient(135deg,#eef2ff,#f8fafc);
-    font-family:'Segoe UI',sans-serif;
-    color:var(--text);
-}
-.card,.stat-card,.dashboard-card,.table{
-    border-radius:var(--radius)!important;
-    overflow:hidden;
-}
-.card,.dashboard-card{
-    border:none!important;
-    box-shadow:var(--shadow)!important;
-    backdrop-filter:blur(10px);
-}
-.btn{
-    border-radius:14px!important;
-    font-weight:600!important;
-    transition:.2s ease-in-out;
-}
-.btn:hover{
-    transform:translateY(-2px) scale(1.02);
-}
-table{
-    overflow:hidden;
-    border-radius:16px!important;
-}
-thead{
-    background:#0f172a!important;
-    color:white!important;
-}
-input,select,textarea{
-    border-radius:14px!important;
-    min-height:45px;
-}
-.mobile-actions{
-    position:sticky;
-    right:0;
-    background:white;
-}
-.badge{
-    border-radius:999px!important;
-    padding:8px 12px!important;
-}
-.sidebar{
-    background:rgba(15,23,42,.95)!important;
-    backdrop-filter:blur(14px);
-}
-::-webkit-scrollbar{
-    width:8px;
-    height:8px;
-}
-::-webkit-scrollbar-thumb{
-    background:#94a3b8;
-    border-radius:20px;
-}
-@media(max-width:768px){
-    .table-responsive{
-        border-radius:16px;
-        overflow:auto;
-    }
-    .btn{
-        width:100%;
-        margin-bottom:6px;
-    }
-    .card{
-        margin-bottom:16px;
-    }
-}
-.smart-float{
-    position:fixed;
-    bottom:20px;
-    right:20px;
-    z-index:9999;
-    border-radius:50px;
-    padding:14px 20px;
-    box-shadow:0 10px 25px rgba(0,0,0,.2);
-}
-.glass{
-    background:rgba(255,255,255,.75);
-    backdrop-filter:blur(16px);
-}
-</style>
-
-<style>
+      <style>
 
 /* ===== KLINIK USG 4D — FULL RESPONSIVE REDESIGN v3 ===== */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
@@ -1588,12 +1477,12 @@ html.light table th { background: rgba(240,245,251,.95) !important; }
             <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' else '' }}"><span class="nav-icon">🏠</span><span>Dashboard</span></a>
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('antrian') }}" class="{{ 'active' if request.endpoint=='antrian' else '' }}"><span class="nav-icon">🚶</span><span>Antrian</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="{{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}"><span class="nav-icon">📚</span><span>Rekam Medis</span></a>{% endif %}
-            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="{{ 'active' if request.endpoint=='patient_new' else '' }}"><span class="nav-icon">+</span><span>Input Pasien</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="{{ 'active' if request.endpoint=='patient_new' else '' }}"><span class="nav-icon">➕</span><span>Input Pasien</span></a>{% endif %}
             <div class="nav-title">Operasional</div>
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('panduan_admin') }}" class="{{ 'active' if request.endpoint=='panduan_admin' else '' }}"><span class="nav-icon">👩‍💻</span><span>SOP Admin</span></a>{% endif %}
-            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="{{ 'active' if request.endpoint=='panduan_dokter' else '' }}"><span class="nav-icon">[DOKTER]</span><span>SOP Dokter</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','dokter'] %}<a href="{{ url_for('panduan_dokter') }}" class="{{ 'active' if request.endpoint=='panduan_dokter' else '' }}"><span class="nav-icon">👨‍⚕️</span><span>SOP Dokter</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('soap_templates_page') }}" class="{{ 'active' if request.endpoint=='soap_templates_page' else '' }}"><span class="nav-icon">🧩</span><span>Template</span></a>{% endif %}
-            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="{{ 'active' if request.endpoint=='sop_page' else '' }}"><span class="nav-icon">[DATA]</span><span>SOP</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('sop_page') }}" class="{{ 'active' if request.endpoint=='sop_page' else '' }}"><span class="nav-icon">📋</span><span>SOP</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('uploads_page') }}" class="{{ 'active' if request.endpoint=='uploads_page' else '' }}"><span class="nav-icon">📁</span><span>Hasil USG</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('billing_page') }}" class="{{ 'active' if request.endpoint=='billing_page' else '' }}"><span class="nav-icon">💳</span><span>Billing</span></a>{% endif %}
             <div class="nav-title">Sistem</div>
@@ -1631,7 +1520,7 @@ html.light table th { background: rgba(240,245,251,.95) !important; }
       {% endif %}
     </body>
     </html>
-    """
+    '''
     return render_template_string(base, title=title, app_name=APP_NAME, body=body, user=user, now_label=fmt_dt(now()))
 
 
@@ -1715,7 +1604,7 @@ def add_appointment():
 
     body = """
     <div class="card">
-      <h2>+ Tambah Appointment</h2>
+      <h2>➕ Tambah Appointment</h2>
 
       <form method="post" class="grid">
         <div>
@@ -1843,7 +1732,7 @@ def login():
         log_action('LOGIN_FAILED', 'Gagal login: ' + username)
         flash('Username atau password salah.', 'danger')
 
-    body = """
+    body = '''
     <div class="login-page">
       <!-- Floating animated orbs -->
       <div class="login-orb login-orb-1"></div>
@@ -1919,7 +1808,7 @@ def login():
     <style>
       @keyframes ripple{ to{ transform:scale(300); opacity:0; } }
     </style>
-    """
+    '''
 
     return render_page('Login', body, app_name=APP_NAME)
 
@@ -1942,7 +1831,7 @@ def dashboard():
         cur.execute('SELECT * FROM patients WHERE id=?', (user['patient_id'],)); patient = cur.fetchone()
         cur.execute('SELECT COUNT(*) FROM uploads WHERE patient_id=?', (user['patient_id'],)); total_upload = cur.fetchone()[0]
         cur.execute('SELECT * FROM soap_records WHERE patient_id=? ORDER BY created_at DESC LIMIT 5', (user['patient_id'],)); soaps = cur.fetchall()
-        body = """
+        body = '''
         <div class="hero card"><div><h3 style="margin:0">Halo, {{ user['full_name'] or user['username'] }}</h3><p class="muted">Dashboard pasien untuk melihat ringkasan pemeriksaan dan link hasil.</p>{% if patient %}<div class="pill-list"><span class="pill">No RM: {{ patient['nomor_rekam_medis'] }}</span><span class="pill">Status: {{ patient['status_antrian'] }}</span><span class="pill">Total hasil: {{ total_upload }}</span></div>{% endif %}</div></div>
         {% if patient %}
         <div class="g2 grid" style="margin-top:16px">
@@ -1950,7 +1839,7 @@ def dashboard():
           <div class="card"><h3>Riwayat Pemeriksaan Terbaru</h3>{% if soaps %}{% for s in soaps %}<div class="card" style="padding:12px;margin-bottom:12px"><div class="small muted">{{ fmt_dt(s['created_at']) }}</div><div><strong>A:</strong> {{ s['assessment'] or '-' }}</div><div><strong>P:</strong> {{ s['plan'] or '-' }}</div></div>{% endfor %}{% else %}<div class="empty">Belum ada riwayat.</div>{% endif %}</div>
         </div>
         {% else %}<div class="card"><div class="empty">Akun pasien belum ditautkan ke data pasien.</div></div>{% endif %}
-        """
+        '''
         return render_page('Dashboard Pasien', body, patient=patient, total_upload=total_upload, soaps=soaps, fmt_dt=fmt_dt)
     cur.execute('SELECT COUNT(*) FROM patients WHERE date(created_at)=date(?)', (today(),)); total_today = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM patients WHERE status_antrian='menunggu'"); waiting = cur.fetchone()[0]
@@ -1959,7 +1848,7 @@ def dashboard():
     cur.execute('SELECT COUNT(*) FROM uploads'); total_uploads = cur.fetchone()[0]
 
     # Chart Data: Kunjungan 7 Hari Terakhir
-    cur.execute("""
+    cur.execute('''
         SELECT date(created_at) as d, COUNT(*) as c 
         FROM patients 
         WHERE created_at >= date('now', '-6 days') 
@@ -1986,7 +1875,7 @@ def dashboard():
     patients_rows = cur.fetchall()
     cur.execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8'); audits = cur.fetchall()
 
-    body = r"""
+    body = r'''
     <div class="space-y-6">
       <!-- Welcome Banner -->
       <div class="card p-6 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border-emerald-500/30">
@@ -1998,7 +1887,7 @@ def dashboard():
           <div class="flex gap-3 no-print">
             {% if user['role'] in ['superadmin','admin'] %}
             <a class="btn btn-primary shadow-lg shadow-emerald-500/20" href="{{ url_for('patient_new') }}">
-              <span class="text-lg">+</span> Input Pasien Baru
+              <span class="text-lg">➕</span> Input Pasien Baru
             </a>
             {% endif %}
             <a class="btn bg-slate-800 border-slate-700 hover:bg-slate-700" href="{{ url_for('antrian') }}">
@@ -2034,7 +1923,7 @@ def dashboard():
               <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Sedang Diperiksa</div>
               <div class="text-4xl font-black text-cyan-400">{{ checked }}</div>
             </div>
-            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">[DOKTER]</div>
+            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">👨‍⚕️</div>
           </div>
         </div>
         <div class="stat group hover:scale-[1.02] transition-transform border-blue-500/20">
@@ -2074,7 +1963,7 @@ def dashboard():
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="card p-0 overflow-hidden">
           <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
-            <h3 class="text-lg font-bold m-0">[DATA] Antrian Aktif / Pasien Terbaru</h3>
+            <h3 class="text-lg font-bold m-0">📋 Antrian Aktif / Pasien Terbaru</h3>
             <a href="{{ url_for('patients') }}" class="text-xs font-bold text-emerald-400 hover:underline">Lihat Semua →</a>
           </div>
           <div class="table-wrap">
@@ -2201,7 +2090,7 @@ def dashboard():
         });
       });
     </script>
-    """
+    '''
     return render_page('Dashboard', body, total_today=total_today, waiting=waiting, checked=checked, finished=finished, total_uploads=total_uploads, patients_rows=patients_rows, audits=audits, fmt_dt=fmt_dt, daily_labels=daily_labels, daily_values=daily_values)
 
 @app.route('/antrian')
@@ -2210,7 +2099,7 @@ def antrian():
     conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT * FROM patients WHERE status_antrian IN ('menunggu','diperiksa') AND deleted=0 ORDER BY created_at ASC")
     rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
             <h3 style="margin:0">Daftar Antrian Aktif</h3>
@@ -2238,14 +2127,14 @@ def antrian():
                       {% endif %}
                     </td>
                     <td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td>
-                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">KLINIK Periksa</a></td>
+                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">🏥 Periksa</a></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}<div class="empty">Antrian hari ini sudah kosong atau sudah diselesaikan semua.</div>{% endif %}
     </div>
-    """
+    '''
     return render_page('Antrian Hari Ini', body, rows=rows, fmt_dt=fmt_dt)
 
 @app.route('/patients/<int:patient_id>/referral')
@@ -2256,7 +2145,7 @@ def referral_letter(patient_id):
     conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT * FROM soap_records WHERE patient_id=? ORDER BY created_at DESC LIMIT 1', (patient_id,))
     soap = cur.fetchone()
-    body = """
+    body = '''
     <div class="authbox" style="max-width: 800px; margin: 2rem auto; color: black !important;">
       <div class="card" style="background: white !important; border: 2px solid black; padding: 2.5rem; color: black !important; backdrop-filter: none;">
         <div style="text-align: center; border-bottom: 3px double black; padding-bottom: 1rem; margin-bottom: 2rem;">
@@ -2285,7 +2174,7 @@ def referral_letter(patient_id):
         <div class="no-print" style="margin-top: 3rem; text-align: center;"><button class="btn btn-primary" onclick="window.print()">🖨️ Cetak Surat Rujukan</button><a class="btn" href="{{ url_for('patient_detail', patient_id=patient['id']) }}">Kembali</a></div>
       </div>
     </div>
-    """
+    '''
     return render_template_string('<!doctype html><html><head><title>Surat Rujukan - ' + patient['nama_pasien'] + '</title><script src="https://cdn.tailwindcss.com"></script><style>@media print { .no-print { display: none; } body { background: white; } }</style></head><body class="bg-slate-100">' + body + '</body></html>', 
                                  patient=patient, soap=soap, today_label=datetime.now().strftime("%d %B %Y"))
 
@@ -2296,7 +2185,7 @@ def antrian_old():
     # Hanya tampilkan antrian aktif (menunggu/diperiksa) urut dari yang paling lama (FIFO)
     cur.execute("SELECT * FROM patients WHERE status_antrian IN ('menunggu','diperiksa') ORDER BY created_at ASC")
     rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
             <h3 style="margin:0">Daftar Antrian Aktif</h3>
@@ -2317,14 +2206,14 @@ def antrian_old():
                     <td class="mono">{{ p['nomor_rekam_medis'] }}</td>
                     <td>{{ p['dokter_tujuan'] or '-' }}</td>
                     <td><span class="badge {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span></td>
-                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">KLINIK Periksa</a></td>
+                    <td><a class="btn btn-sm btn-primary" href="{{ url_for('patient_detail', patient_id=p['id']) }}">🏥 Periksa</a></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}<div class="empty">Antrian hari ini sudah kosong atau sudah diselesaikan semua.</div>{% endif %}
     </div>
-    """
+    '''
     return render_page('Antrian Hari Ini', body, rows=rows, fmt_dt=fmt_dt)
 
 
@@ -2523,7 +2412,7 @@ def patients():
             start_page = max(1, end_page - max_visible + 1)
     pages_range = list(range(start_page, end_page + 1))
     
-    body = """
+    body = '''
     <div class="space-y-4">
       <!-- Filter Card -->
       <div class="card no-print">
@@ -2558,7 +2447,7 @@ def patients():
             <button class="btn btn-primary py-2">🔍 Filter</button>
             <a class="btn py-2" href="{{ url_for('patients') }}">↻ Reset</a>
             {% if current_user['role'] in ['superadmin','admin'] %}
-            <a class="btn btn-primary py-2" href="{{ url_for('patient_new') }}">+ Baru</a>
+            <a class="btn btn-primary py-2" href="{{ url_for('patient_new') }}">➕ Baru</a>
             <a class="btn py-2" href="{{ url_for('patients_deleted') }}">🗂️ Arsip</a>
             {% endif %}
           </div>
@@ -2616,7 +2505,7 @@ def patients():
                 <td class="px-4 py-3 text-right">
                   <div class="flex gap-1.5 justify-end flex-nowrap">
                     <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_detail', patient_id=p['id']) }}" title="Detail">🔍</a>
-                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="History">[DATA]</a>
+                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="History">📋</a>
                     <form method="post" action="{{ url_for('patient_detail', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Antrikan {{ p['nama_pasien'] }}?')">
                       <input type="hidden" name="action" value="add_to_queue">
                       <button class="btn btn-sm btn-primary text-[10px] px-2 py-1" title="Antrikan">🚶</button>
@@ -2662,7 +2551,7 @@ def patients():
         {% endif %}
       </div>
     </div>
-    """
+    '''
     return render_page('Data Pasien', body, q=q, status=status, doctor=doctor, from_date=from_date, to_date=to_date, sort_by=sort_by, end_count=end_count,
                        doctors=doctors, rows=rows, total=total, page=page, total_pages=total_pages, pages_range=pages_range,
                        offset=offset, per_page=per_page, fmt_dt=fmt_dt)
@@ -2717,7 +2606,7 @@ def patient_new():
                 return redirect(url_for('patient_detail', patient_id=pid))
             except sqlite3.IntegrityError:
                 flash('Nomor rekam medis sudah digunakan.', 'danger')
-    body = """
+    body = '''
     <div class="card" style="margin-bottom:16px">
       <h3 style="margin:0">Cari & Edit Pasien Lama</h3>
       <div class="small muted">Ketik nama / RM / NIK untuk mencari pasien yang sudah terdaftar.</div>
@@ -2925,7 +2814,7 @@ def patient_new():
       };
     });
     </script>
-    """
+    '''
     return render_page('Input Pasien Baru', body, doctors=doctors, edit_patient=edit_patient,
                        goldar_opts=goldar_opts, layanan_opts=layanan_opts, pekerjaan_opts=pekerjaan_opts)
 
@@ -3000,7 +2889,7 @@ def patient_detail(patient_id):
     cur.execute('SELECT * FROM soap_templates ORDER BY id DESC'); templates = cur.fetchall()
     public_url = request.url_root.rstrip('/') + url_for('patient_result', token=patient['access_token'])
     qr_uri = qr_data_uri(public_url)
-    body = """
+    body = '''
     <div class="space-y-4">
       <!-- Header Pasien -->
       <div class="card p-6 bg-gradient-to-br from-slate-800/40 to-slate-900/40">
@@ -3019,7 +2908,7 @@ def patient_detail(patient_id):
           <div class="flex gap-2 no-print">
             <form method="post" onsubmit="return confirm('Antrikan pasien ini?')">
               <input type="hidden" name="action" value="add_to_queue">
-              <button class="btn btn-sm btn-primary">+ Antrikan</button>
+              <button class="btn btn-sm btn-primary">➕ Antrikan</button>
             </form>
             
             <a class="btn btn-sm" href="{{ url_for('patient_new', edit=patient['id']) }}">✏️ Edit</a>
@@ -3067,7 +2956,7 @@ def patient_detail(patient_id):
           <div class="flex justify-between text-[8px] text-slate-500 mt-1">
             <span class="{% if p_steps|length >= 1 %}text-emerald-400{% endif %}">📝 Daftar</span>
             <span class="{% if p_steps|length >= 2 %}text-emerald-400{% endif %}">🚶 Antri</span>
-            <span class="{% if p_steps|length >= 3 %}text-emerald-400{% endif %}">[MEDIS] Periksa</span>
+            <span class="{% if p_steps|length >= 3 %}text-emerald-400{% endif %}">🩺 Periksa</span>
             <span class="{% if p_steps|length >= 4 %}text-emerald-400{% endif %}">📁 Upload</span>
             <span class="{% if p_steps|length >= 5 %}text-emerald-400{% endif %}">💳 Bayar</span>
             <span class="{% if p_steps|length >= 6 %}text-emerald-400{% endif %}">✅ Selesai</span>
@@ -3124,7 +3013,7 @@ def patient_detail(patient_id):
               </div>
               <div class="p-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center">
                 <label class="flex items-center gap-2 cursor-pointer text-xs mb-0"><input type="checkbox" name="informed_consent" required> Informed Consent Disetujui Pasien</label>
-                <button class="btn btn-primary">[MEDIS] Simpan Rekam Medis</button>
+                <button class="btn btn-primary">🩺 Simpan Rekam Medis</button>
               </div>
             </form>
           </div>
@@ -3239,7 +3128,7 @@ def patient_detail(patient_id):
             <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500">Link Hasil Pasien</h3>
             {% if qr_uri %}<img src="{{ qr_uri }}" class="mx-auto w-32 h-32 p-2 bg-white rounded-2xl shadow-xl">{% endif %}
             <div class="mono text-[10px] break-all bg-black/20 p-2 rounded-lg text-slate-400">{{ public_url }}</div>
-            <button class="btn btn-sm w-full justify-center" onclick="navigator.clipboard.writeText('{{ public_url }}');alert('Link disalin')">[DATA] Salin Link WA</button>
+            <button class="btn btn-sm w-full justify-center" onclick="navigator.clipboard.writeText('{{ public_url }}');alert('Link disalin')">📋 Salin Link WA</button>
           </div>
         </div>
       </div>
@@ -3331,7 +3220,7 @@ def patient_detail(patient_id):
         });
     });
     </script>
-    """
+    '''
     return render_page('Detail Pasien - ' + patient['nama_pasien'], body, patient=patient, public_url=public_url, qr_uri=qr_uri, soaps=soaps, files=files, bills=bills, templates=templates, file_badge=file_badge, fmt_dt=fmt_dt, rupiah=rupiah, max_mb=MAX_MB)
 
 
@@ -3348,7 +3237,7 @@ def patient_history(patient_id):
     
     milestone = get_milestone_info(soaps[0]['usia_kehamilan']) if soaps else None
 
-    body = """
+    body = '''
     <div class="space-y-6">
       <!-- Header Resume Pasien -->
       <div class="card p-6 bg-gradient-to-r from-slate-800/50 to-slate-900/50 border-white/10">
@@ -3558,7 +3447,7 @@ def patient_history(patient_id):
         </div>
       </div>
     </div>
-    """
+    '''
     return render_page('Riwayat Pemeriksaan Pasien', body, patient=patient, soaps=soaps, files=files, bills=bills, fmt_dt=fmt_dt, rupiah=rupiah, file_badge=file_badge, milestone=milestone)
 
 
@@ -3568,7 +3457,7 @@ def uploads_page():
     q = request.args.get('q', '').strip()
     conn = get_db(); cur = conn.cursor()
     sql = '''SELECT up.*, p.nama_pasien, p.nomor_rekam_medis, u.username
-             FROM uploads up JOIN patients p ON up.patient_id=p.id LEFT JOIN users u ON up.uploader_id=u.id WHERE 1=1"""
+             FROM uploads up JOIN patients p ON up.patient_id=p.id LEFT JOIN users u ON up.uploader_id=u.id WHERE 1=1'''
     params = []
     if q:
         like = '%' + q + '%'
@@ -3576,10 +3465,10 @@ def uploads_page():
         params += [like, like, like]
     sql += ' ORDER BY up.created_at DESC'
     cur.execute(sql, tuple(params)); rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari pasien / RM / nama file..."><button class="btn btn-primary">🔍 Cari</button></form></div>
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Semua Upload Hasil USG</h3><span class="badge">{{ rows|length }} file</span></div>{% if rows %}<table><thead><tr><th>Pasien</th><th>File</th><th>Tipe</th><th>Ukuran</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r['nama_pasien'] }}</strong><div class="small muted">{{ r['nomor_rekam_medis'] }}</div></td><td>{{ r['original_filename'] }}<div class="small muted">Uploader: {{ r['username'] or '-' }}</div></td><td>{{ file_badge(r['file_ext']) }}</td><td>{{ '%.2f MB'|format((r['file_size'] or 0)/1024/1024) }}</td><td>{{ fmt_dt(r['created_at']) }}</td><td><a class="btn btn-sm" href="{{ url_for('file_view_auth', upload_id=r['id']) }}" target="_blank">Buka</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada upload.</div>{% endif %}</div>
-    """
+    '''
     return render_page('Hasil Upload USG', body, q=q, rows=rows, file_badge=file_badge, fmt_dt=fmt_dt)
 
 
@@ -3609,7 +3498,7 @@ def patient_result(token):
     if soaps:
         milestone = get_milestone_info(soaps[0]['usia_kehamilan'])
 
-    body = """
+    body = '''
     <div class="authbox"><div class="card"><div class="hero"><div><h2 style="margin:0">Hasil USG Pasien</h2><div class="muted">Halaman aman berbasis token unik. Data pasien lain tidak dapat diakses dari halaman ini.</div><div class="pill-list" style="margin-top:10px"><span class="pill">Nama: {{ patient['nama_pasien'] }}</span><span class="pill">No RM: {{ patient['nomor_rekam_medis'] }}</span><span class="pill">Status: {{ patient['status_antrian'] }}</span></div></div><div class="toolbar no-print"><button class="btn btn-primary" onclick="printPage()">🖨️ Cetak Hasil</button></div></div><div class="g2 grid" style="margin-top:16px"><div class="card"><h3>Ringkasan Pemeriksaan</h3>{% if soaps %}{% set s = soaps[0] %}<div class="small muted">Pemeriksaan terbaru: {{ fmt_dt(s['created_at']) }} oleh {{ s['doctor_name'] or s['doctor_username'] or '-' }}</div><div class="wrap" style="margin-top:8px"><strong>Assessment:</strong> {{ s['assessment'] or '-' }}</div><div class="wrap"><strong>Plan:</strong> {{ s['plan'] or '-' }}</div><div class="pill-list" style="margin-top:10px"><span class="pill">Usia Kehamilan: {{ s['usia_kehamilan'] or '-' }}</span><span class="pill">DJJ: {{ s['detak_jantung_janin'] or '-' }}</span><span class="pill">Posisi: {{ s['posisi_janin'] or '-' }}</span><span class="pill">EBJ: {{ s['estimasi_berat_janin'] or '-' }}</span></div>{% if s['catatan_dokter'] %}<div class="wrap" style="margin-top:10px"><strong>Catatan Dokter:</strong> {{ s['catatan_dokter'] }}</div>{% endif %}{% if s['rekomendasi_kontrol_ulang'] %}<div class="wrap"><strong>Kontrol Ulang:</strong> {{ s['rekomendasi_kontrol_ulang'] }}</div>{% endif %}{% else %}<div class="empty">Belum ada ringkasan pemeriksaan.</div>{% endif %}</div><div class="card"><h3>Ringkasan Billing</h3><div class="stat"><div class="small muted">Total tagihan tercatat</div><div style="font-size:30px;font-weight:800">{{ rupiah(total_bill) }}</div></div><div class="small muted" style="margin-top:10px">Hubungi klinik untuk rincian pembayaran bila diperlukan.</div></div></div><div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">File Hasil USG</h3><span class="badge">{{ files|length }} file</span></div>{% if files %}<table><thead><tr><th>Nama File</th><th>Tipe</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>{% for f in files %}<tr><td>{{ f['original_filename'] }}</td><td>{{ file_badge(f['file_ext']) }}</td><td>{{ fmt_dt(f['created_at']) }}</td><td><a class="btn btn-sm" href="{{ url_for('patient_file_public', token=patient['access_token'], upload_id=f['id']) }}" target="_blank">Buka File</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada file hasil.</div>{% endif %}</div></div></div>
     {% if milestone %}
     <div class="card" style="margin-top:16px; background: linear-gradient(135deg, rgba(14,165,233,0.1), rgba(34,197,94,0.1)); border: 1px solid var(--accent);">
@@ -3618,7 +3507,7 @@ def patient_result(token):
     </div>
     {% endif %}
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">File Hasil USG</h3><span class="badge">{{ files|length }} file</span></div>{% if files %}<table><thead><tr><th>Nama File</th><th>Tipe</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>{% for f in files %}<tr><td>{{ f['original_filename'] }}</td><td>{{ file_badge(f['file_ext']) }}</td><td>{{ fmt_dt(f['created_at']) }}</td><td><a class="btn btn-sm" href="{{ url_for('patient_file_public', token=patient['access_token'], upload_id=f['id']) }}" target="_blank">Buka File</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada file hasil.</div>{% endif %}</div></div></div>
-    """
+    '''
     return render_page('Hasil Pasien - ' + patient['nama_pasien'], body, patient=patient, files=files, soaps=soaps, total_bill=total_bill, file_badge=file_badge, fmt_dt=fmt_dt, rupiah=rupiah, milestone=milestone)
 
 
@@ -3649,7 +3538,7 @@ def patients_deleted():
     conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, nik, nomor_hp, deleted_at, deleted_by FROM patients WHERE deleted=1 ORDER BY deleted_at DESC LIMIT 100")
     rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="space-y-4">
       <div class="card">
         <div class="flex items-center gap-2 mb-4">
@@ -3686,7 +3575,7 @@ def patients_deleted():
       </div>
       <a class="btn" href="{{ url_for('patients') }}">⬅ Kembali ke Data Pasien</a>
     </div>
-    """
+    '''
     return render_page('Arsip Pasien', body, rows=rows, fmt_dt=fmt_dt)
 
 
@@ -3760,9 +3649,9 @@ def soap_templates_page():
             conn.commit(); log_action('CREATE_SOAP_TEMPLATE', title); flash('Template SOAP berhasil ditambahkan.', 'success'); return redirect(url_for('soap_templates_page'))
         flash('Judul template wajib diisi.', 'danger')
     cur.execute('SELECT st.*, u.username FROM soap_templates st LEFT JOIN users u ON st.created_by=u.id ORDER BY st.id DESC'); rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="g2 grid"><div class="card no-print"><h3>Tambah Template SOAP Cepat</h3><form method="post" class="grid"><div><label>Judul Template</label><input class="input" name="title" required></div><div><label>Subjective</label><textarea class="textarea" name="subjective"></textarea></div><div><label>Objective</label><textarea class="textarea" name="objective"></textarea></div><div><label>Assessment</label><textarea class="textarea" name="assessment"></textarea></div><div><label>Plan</label><textarea class="textarea" name="plan"></textarea></div><button class="btn btn-primary">💾 Simpan Template</button></form></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar Template SOAP</h3><span class="badge">{{ rows|length }} template</span></div>{% if rows %}{% for r in rows %}<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><strong>{{ r['title'] }}</strong><span class="small muted">{{ r['username'] or '-' }}</span></div><div class="wrap"><strong>S:</strong> {{ r['subjective'] or '-' }}</div><div class="wrap"><strong>O:</strong> {{ r['objective'] or '-' }}</div><div class="wrap"><strong>A:</strong> {{ r['assessment'] or '-' }}</div><div class="wrap"><strong>P:</strong> {{ r['plan'] or '-' }}</div></div>{% endfor %}{% else %}<div class="empty">Belum ada template.</div>{% endif %}</div></div>
-    """
+    '''
     return render_page('Template SOAP Cepat', body, rows=rows)
 
 
@@ -3771,7 +3660,7 @@ def soap_templates_page():
 @app.route('/panduan/admin')
 @role_required('superadmin', 'admin')
 def panduan_admin():
-    body = """
+    body = '''
     <div class="hero card mb-6">
         <div>
             <h3 class="text-2xl font-bold text-white mb-2">👩‍💻 SOP Panduan Admin</h3>
@@ -3804,17 +3693,17 @@ def panduan_admin():
             </div>
         </div>
     </div>
-    """
+    '''
     return render_page('SOP Admin', body)
 
 
 @app.route('/panduan/dokter')
 @role_required('superadmin', 'dokter')
 def panduan_dokter():
-    body = """
+    body = '''
     <div class="hero card mb-6">
         <div>
-            <h3 class="text-2xl font-bold text-white mb-2">[DOKTER] SOP Panduan Dokter</h3>
+            <h3 class="text-2xl font-bold text-white mb-2">👨‍⚕️ SOP Panduan Dokter</h3>
             <div class="text-slate-400">Panduan standar pelayanan medis dan penggunaan fitur USG 4D.</div>
         </div>
     </div>
@@ -3847,7 +3736,7 @@ def panduan_dokter():
             </div>
         </div>
     </div>
-    """
+    '''
     return render_page('SOP Dokter', body)
 
 
@@ -3855,15 +3744,15 @@ def panduan_dokter():
 @app.route('/sop')
 @role_required('superadmin', 'admin', 'dokter')
 def sop_page():
-    body = """
-    <div class="hero card"><div><h3 style="margin:0">SOP Operasional Klinik USG</h3><div class="muted">Panduan ringkas alur kerja admin dan dokter.</div></div><a class="btn btn-primary no-print" href="{{ url_for('patient_new') }}">+ Input Pasien</a></div>
+    body = '''
+    <div class="hero card"><div><h3 style="margin:0">SOP Operasional Klinik USG</h3><div class="muted">Panduan ringkas alur kerja admin dan dokter.</div></div><a class="btn btn-primary no-print" href="{{ url_for('patient_new') }}">➕ Input Pasien</a></div>
     <div class="g2 grid" style="margin-top:16px">
       <div class="card"><h3>1. Registrasi Pasien</h3><ul><li>Input identitas minimal: nama, HP, umur/tanggal lahir, layanan.</li><li>Pilih dokter tujuan dan status awal <strong>menunggu</strong>.</li><li>Pastikan No. RM unik atau gunakan auto-generate.</li></ul></div>
       <div class="card"><h3>2. Pemeriksaan Dokter</h3><ul><li>Buka detail pasien dari daftar antrian.</li><li>Isi SOAP: Subjective, Objective, Assessment, Plan.</li><li>Lengkapi data USG: usia kehamilan, DJJ, posisi janin, EBJ.</li></ul></div>
       <div class="card"><h3>3. Upload Hasil</h3><ul><li>Upload hasil USG format jpg/png/pdf/mp4/mov.</li><li>Gunakan link/QR pasien untuk berbagi hasil.</li><li>Jangan kirim data pasien lain melalui link yang sama.</li></ul></div>
       <div class="card"><h3>4. Billing & Penutupan</h3><ul><li>Admin input item billing dan status pembayaran.</li><li>Set antrian menjadi <strong>selesai</strong> setelah layanan selesai.</li><li>Backup database rutin dari tombol Backup.</li></ul></div>
     </div>
-    """
+    '''
     return render_page('SOP Klinik', body)
 
 
@@ -3876,10 +3765,10 @@ def billing_page():
     if q:
         like = '%' + q + '%'; sql += ' AND (p.nama_pasien LIKE ? OR p.nomor_rekam_medis LIKE ? OR b.item_name LIKE ?)'; params += [like, like, like]
     sql += ' ORDER BY b.created_at DESC'; cur.execute(sql, tuple(params)); rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari pasien / RM / item billing..."><button class="btn btn-primary">🔍 Cari</button></form></div>
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Billing Klinik</h3><span class="badge">{{ rows|length }} transaksi</span></div>{% if rows %}<div class="table-wrap"><table><thead><tr><th>Pasien</th><th>Item</th><th>Nominal</th><th>Status</th><th>Tanggal</th><th class="action-col">Aksi</th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r['nama_pasien'] }}</strong><div class="small muted">{{ r['nomor_rekam_medis'] }}</div></td><td>{{ r['item_name'] }}<div class="small muted">{{ r['notes'] or '' }}</div></td><td>{{ rupiah(r['amount']) }}</td><td><span class="badge {{ 'paid' if r['status_bayar']=='lunas' else 'unpaid' }}">{{ r['status_bayar'] }}</span></td><td>{{ fmt_dt(r['created_at']) }}</td><td class="action-col"><div class="action-buttons">{% if r['status_bayar'] != 'lunas' %}<form method="post" action="{{ url_for('billing_set_lunas', billing_id=r['id']) }}"><button class="btn btn-primary btn-sm">✅ Lunas</button></form>{% else %}<span class="badge paid">Sudah Lunas</span>{% endif %}</div></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada billing.</div>{% endif %}</div>
-    """
+    '''
     return render_page('Billing', body, q=q, rows=rows, rupiah=rupiah, fmt_dt=fmt_dt)
 
 
@@ -3911,9 +3800,9 @@ def users_page():
                 flash('Username sudah dipakai.', 'danger')
     cur.execute('SELECT id,nama_pasien,nomor_rekam_medis FROM patients ORDER BY nama_pasien'); patients_list = cur.fetchall()
     cur.execute('SELECT * FROM users ORDER BY id DESC'); rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="g2 grid"><div class="card no-print"><h3>Tambah User</h3><form method="post" class="grid"><div><label>Username</label><input class="input" name="username" required></div><div><label>Nama Lengkap</label><input class="input" name="full_name"></div><div><label>Password</label><input class="input" type="password" name="password" required></div><div><label>Role</label><select class="select" name="role"><option value="admin">admin</option><option value="dokter">dokter</option><option value="pasien">pasien</option><option value="superadmin">superadmin</option></select></div><div><label>Tautkan ke pasien (opsional untuk role pasien)</label><select class="select" name="patient_id"><option value="">- Tidak ditautkan -</option>{% for p in patients_list %}<option value="{{ p['id'] }}">{{ p['nama_pasien'] }} - {{ p['nomor_rekam_medis'] }}</option>{% endfor %}</select></div><button class="btn btn-primary">👤 Simpan User</button></form></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar User</h3><span class="badge">{{ rows|length }} user</span></div><table><thead><tr><th>Username</th><th>Role</th><th>Nama</th><th>Patient ID</th><th>Aktif</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{ r['username'] }}</td><td>{{ r['role'] }}</td><td>{{ r['full_name'] or '-' }}</td><td>{{ r['patient_id'] or '-' }}</td><td>{{ 'Ya' if r['active'] else 'Tidak' }}</td></tr>{% endfor %}</tbody></table></div></div>
-    """
+    '''
     return render_page('Manajemen User', body, rows=rows, patients_list=patients_list)
 
 
@@ -3924,10 +3813,10 @@ def audit_logs_page():
     if q:
         like = '%' + q + '%'; sql += ' AND (username LIKE ? OR action LIKE ? OR details LIKE ?)'; params += [like, like, like]
     sql += ' ORDER BY id DESC LIMIT 300'; cur.execute(sql, tuple(params)); rows = cur.fetchall()
-    body = """
+    body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari username / action / detail..."><button class="btn btn-primary">🔍 Cari</button></form></div>
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Audit Log Aktivitas</h3><span class="badge">max 300</span></div>{% if rows %}<table><thead><tr><th>Waktu</th><th>User</th><th>Aksi</th><th>Detail</th><th>IP</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{ fmt_dt(r['created_at']) }}</td><td>{{ r['username'] or '-' }}</td><td><strong>{{ r['action'] }}</strong></td><td>{{ r['details'] or '' }}</td><td>{{ r['ip_address'] or '-' }}</td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada aktivitas audit.</div>{% endif %}</div>
-    """
+    '''
     return render_page('Audit Log', body, q=q, rows=rows, fmt_dt=fmt_dt)
 
 
@@ -3981,7 +3870,7 @@ def settings():
     master_rows = cur.fetchall()
     master_opts = {r['category']: r['options_text'] for r in master_rows}
 
-    body = """
+    body = '''
     <div class="g2 grid">
       <div class="card no-print">
         <h3>Ubah Profil</h3>
@@ -4026,7 +3915,7 @@ def settings():
             <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('golongan_darah','A,B,AB,O') }}</div>
           </div>
           <div>
-            <label>KLINIK Jenis Layanan</label>
+            <label>🏥 Jenis Layanan</label>
             <input class="input" name="jenis_layanan" value="{{ master_opts.get('jenis_layanan','Umum,BPJS,Asuransi') }}" placeholder="Umum,BPJS,Asuransi">
             <div class="small muted" style="margin-top:4px">Nilai saat ini: {{ master_opts.get('jenis_layanan','') }}</div>
           </div>
@@ -4042,7 +3931,7 @@ def settings():
       </form>
     </div>
     {% endif %}
-    """
+    '''
     return render_page('Settings', body, fmt_dt=fmt_dt, master_opts=master_opts)
 
 
@@ -4058,19 +3947,19 @@ def backup_db():
 
 @app.errorhandler(404)
 def e404(e):
-    body = '''<div class="authbox loginbox"><div class="card center"><h2>404 - Halaman tidak ditemukan</h2><div class="muted">Periksa URL atau kembali ke dashboard/login.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ url_for('index') }}">🏠 Kembali</a></div></div></div>"""
+    body = '''<div class="authbox loginbox"><div class="card center"><h2>404 - Halaman tidak ditemukan</h2><div class="muted">Periksa URL atau kembali ke dashboard/login.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ url_for('index') }}">🏠 Kembali</a></div></div></div>'''
     return render_page('404', body), 404
 
 
 @app.errorhandler(403)
 def e403(e):
-    body = '''<div class="authbox loginbox"><div class="card center"><h2>403 - Akses ditolak</h2><div class="muted">Anda tidak memiliki izin membuka halaman ini.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ url_for('dashboard') if current_user else url_for('login') }}">⬅️ Kembali</a></div></div></div>"""
+    body = '''<div class="authbox loginbox"><div class="card center"><h2>403 - Akses ditolak</h2><div class="muted">Anda tidak memiliki izin membuka halaman ini.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ url_for('dashboard') if current_user else url_for('login') }}">⬅️ Kembali</a></div></div></div>'''
     return render_page('403', body), 403
 
 
 @app.errorhandler(413)
 def e413(e):
-    body = '''<div class="authbox loginbox"><div class="card center"><h2>File terlalu besar</h2><div class="muted">Ukuran maksimal upload adalah {{ max_mb }} MB.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ request.referrer or url_for('dashboard') }}">⬅️ Kembali</a></div></div></div>"""
+    body = '''<div class="authbox loginbox"><div class="card center"><h2>File terlalu besar</h2><div class="muted">Ukuran maksimal upload adalah {{ max_mb }} MB.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ request.referrer or url_for('dashboard') }}">⬅️ Kembali</a></div></div></div>'''
     return render_page('Upload Terlalu Besar', body, max_mb=MAX_MB), 413
 
 
@@ -4094,40 +3983,3 @@ if __name__ == '__main__':
         print('Detail error: {}'.format(exc))
         print('Solusi: tutup aplikasi lain yang memakai port ini, jalankan BAT sebagai Administrator, atau set KLINIK_PORT ke port lain.')
         raise
-
-
-SMART_UI_SCRIPT = r"""
-<script>
-document.addEventListener('DOMContentLoaded', function(){
-
-    // Smart table search
-    document.querySelectorAll('input[type="search"]').forEach(el=>{
-        el.setAttribute('placeholder','Cari pasien / dokter / billing...');
-    });
-
-    // Smooth appearance
-    document.querySelectorAll('.card,.btn,table').forEach((el,i)=>{
-        el.style.opacity='0';
-        el.style.transform='translateY(10px)';
-        setTimeout(()=>{
-            el.style.transition='all .3s ease';
-            el.style.opacity='1';
-            el.style.transform='translateY(0)';
-        }, i*40);
-    });
-
-    // Auto active button
-    document.querySelectorAll('.btn').forEach(btn=>{
-        btn.addEventListener('click',()=>{
-            btn.style.transform='scale(.96)';
-            setTimeout(()=>btn.style.transform='',150);
-        });
-    });
-
-});
-</script>
-"""
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
