@@ -53,6 +53,7 @@ DEFAULT_PORT = 5006
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'change-this-secret')
+app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -63,12 +64,13 @@ def hitung_risiko_kehamilan(td_sistolik, td_diastolik, djj):
     try:
         sys = int(str(td_sistolik).strip()) if td_sistolik else 120
         dia = int(str(td_diastolik).strip()) if td_diastolik else 80
-        # Try to parse string with digits like "145 bpm"
-        d = int(''.join(filter(str.isdigit, str(djj)))) if djj else 140
+        # Filter digit untuk menangani string seperti "140 bpm"
+        digits = ''.join(filter(str.isdigit, str(djj)))
+        d = int(digits) if digits else 140
     except ValueError:
         return {'status': 'Hijau', 'label': 'Risiko Rendah (Data Tidak Lengkap)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
 
-    if sys >= 160 or dia >= 110 or d < 100 or d > 170:
+    if sys >= 160 or dia >= 110 or (d > 0 and (d < 100 or d > 170)):
         return {'status': 'Merah', 'label': 'Risiko Tinggi (Peringatan Dini)', 'color': '#ef4444', 'bg': 'rgba(239,68,68,0.15)'}
     elif sys >= 140 or dia >= 90 or d < 110 or d > 160:
         return {'status': 'Kuning', 'label': 'Risiko Sedang (Pantau Lanjut)', 'color': '#f59e0b', 'bg': 'rgba(245,158,11,0.15)'}
@@ -2712,6 +2714,14 @@ def patient_detail(patient_id):
             </form>
           </div>
 
+          <!-- Grafik Pertumbuhan Janin -->
+          <div class="card">
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><span class="w-1.5 h-6 bg-sky-500 rounded-full"></span> Tren Pertumbuhan Janin</h3>
+            <div class="h-[250px] w-full">
+              <canvas id="growthChart"></canvas>
+            </div>
+          </div>
+
           <!-- Tabel Growth -->
           {% if soaps %}
           <div class="card overflow-hidden">
@@ -2831,6 +2841,49 @@ def patient_detail(patient_id):
         document.getElementById('plan').value=d.plan||'';
       }catch(e){alert('Template gagal dipakai')}
     }
+
+    // Initialize Chart
+    document.addEventListener('DOMContentLoaded', function() {
+      fetch('/api/fetal_growth/{{ patient["id"] }}')
+        .then(r => r.json())
+        .then(data => {
+          const ctx = document.getElementById('growthChart').getContext('2d');
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: [
+                {
+                  label: 'Berat Janin (gr)',
+                  data: data.ebj,
+                  borderColor: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  yAxisID: 'y',
+                  tension: 0.3
+                },
+                {
+                  label: 'DJJ (bpm)',
+                  data: data.djj,
+                  borderColor: '#0ea5e9',
+                  backgroundColor: 'transparent',
+                  yAxisID: 'y1',
+                  borderDash: [5, 5],
+                  tension: 0.3
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: { type: 'linear', display: true, position: 'left', grid: { color: 'rgba(255,255,255,0.05)' } },
+                y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+              },
+              plugins: { legend: { labels: { color: '#7b93b5', boxWidth: 12, font: { size: 10 } } } }
+            }
+          });
+        });
+    });
     </script>
     '''
     return render_page('Detail Pasien - ' + patient['nama_pasien'], body, patient=patient, public_url=public_url, qr_uri=qr_uri, soaps=soaps, files=files, bills=bills, templates=templates, file_badge=file_badge, fmt_dt=fmt_dt, rupiah=rupiah, max_mb=MAX_MB)
@@ -3545,8 +3598,6 @@ def e413(e):
     body = '''<div class="authbox loginbox"><div class="card center"><h2>File terlalu besar</h2><div class="muted">Ukuran maksimal upload adalah {{ max_mb }} MB.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ request.referrer or url_for('dashboard') }}">⬅️ Kembali</a></div></div></div>'''
     return render_page('Upload Terlalu Besar', body, max_mb=MAX_MB), 413
 
-
-init_db()
 
 if __name__ == '__main__':
     port = get_port()
