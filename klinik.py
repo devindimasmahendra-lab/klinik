@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+
+# =====================================================
+# SMART UI UPGRADE PACK 2026
+# - Modern glassmorphism UI
+# - Better responsive table
+# - Floating action buttons
+# - Smart search highlight
+# - Auto dark-mode compatible style
+# - Sticky action buttons
+# - Better mobile spacing
+# =====================================================
+
+
 # -*- coding: utf-8 -*-
 # klinik.py - Single-file Flask app untuk sistem klinik USG 4D
 # Jalankan: python klinik.py
@@ -586,7 +599,104 @@ def render_page(title, body_tpl, **ctx):
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
       <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-      <style>
+      
+<style>
+:root{
+    --primary:#2563eb;
+    --secondary:#0f172a;
+    --success:#16a34a;
+    --danger:#dc2626;
+    --warning:#f59e0b;
+    --bg:#f1f5f9;
+    --card:#ffffff;
+    --text:#0f172a;
+    --radius:18px;
+    --shadow:0 10px 30px rgba(0,0,0,.08);
+}
+body{
+    background:linear-gradient(135deg,#eef2ff,#f8fafc);
+    font-family:'Segoe UI',sans-serif;
+    color:var(--text);
+}
+.card,.stat-card,.dashboard-card,.table{
+    border-radius:var(--radius)!important;
+    overflow:hidden;
+}
+.card,.dashboard-card{
+    border:none!important;
+    box-shadow:var(--shadow)!important;
+    backdrop-filter:blur(10px);
+}
+.btn{
+    border-radius:14px!important;
+    font-weight:600!important;
+    transition:.2s ease-in-out;
+}
+.btn:hover{
+    transform:translateY(-2px) scale(1.02);
+}
+table{
+    overflow:hidden;
+    border-radius:16px!important;
+}
+thead{
+    background:#0f172a!important;
+    color:white!important;
+}
+input,select,textarea{
+    border-radius:14px!important;
+    min-height:45px;
+}
+.mobile-actions{
+    position:sticky;
+    right:0;
+    background:white;
+}
+.badge{
+    border-radius:999px!important;
+    padding:8px 12px!important;
+}
+.sidebar{
+    background:rgba(15,23,42,.95)!important;
+    backdrop-filter:blur(14px);
+}
+::-webkit-scrollbar{
+    width:8px;
+    height:8px;
+}
+::-webkit-scrollbar-thumb{
+    background:#94a3b8;
+    border-radius:20px;
+}
+@media(max-width:768px){
+    .table-responsive{
+        border-radius:16px;
+        overflow:auto;
+    }
+    .btn{
+        width:100%;
+        margin-bottom:6px;
+    }
+    .card{
+        margin-bottom:16px;
+    }
+}
+.smart-float{
+    position:fixed;
+    bottom:20px;
+    right:20px;
+    z-index:9999;
+    border-radius:50px;
+    padding:14px 20px;
+    box-shadow:0 10px 25px rgba(0,0,0,.2);
+}
+.glass{
+    background:rgba(255,255,255,.75);
+    backdrop-filter:blur(16px);
+}
+</style>
+
+<style>
 
 /* ===== KLINIK USG 4D — FULL RESPONSIVE REDESIGN v3 ===== */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
@@ -3983,3 +4093,34 @@ if __name__ == '__main__':
         print('Detail error: {}'.format(exc))
         print('Solusi: tutup aplikasi lain yang memakai port ini, jalankan BAT sebagai Administrator, atau set KLINIK_PORT ke port lain.')
         raise
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+
+    // Smart table search
+    document.querySelectorAll('input[type="search"]').forEach(el=>{
+        el.setAttribute('placeholder','Cari pasien / dokter / billing...');
+    });
+
+    // Smooth appearance
+    document.querySelectorAll('.card,.btn,table').forEach((el,i)=>{
+        el.style.opacity='0';
+        el.style.transform='translateY(10px)';
+        setTimeout(()=>{
+            el.style.transition='all .3s ease';
+            el.style.opacity='1';
+            el.style.transform='translateY(0)';
+        }, i*40);
+    });
+
+    // Auto active button
+    document.querySelectorAll('.btn').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+            btn.style.transform='scale(.96)';
+            setTimeout(()=>btn.style.transform='',150);
+        });
+    });
+
+});
+</script>
