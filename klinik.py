@@ -28,11 +28,13 @@ import uuid
 import base64
 import shutil
 import sqlite3
+import re
+import logging
 from datetime import datetime, date, timedelta
 from functools import wraps
 from typing import Optional
 
-from flask import Flask, request, redirect, url_for, render_template_string, session, flash, abort, send_from_directory, send_file
+from flask import Flask, request, redirect, url_for, render_template_string, session, flash, abort, send_from_directory, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -57,17 +59,30 @@ app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
 app.config['MAX_CONTENT_LENGTH'] = MAX_MB * 1024 * 1024
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 
+# Setup Logging for long-term stability
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]',
+    handlers=[logging.FileHandler(os.path.join(BASE_DIR, "klinik.log")), logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 
 def hitung_risiko_kehamilan(td_sistolik, td_diastolik, djj):
+    def pick_int(val, default):
+        if val is None: return default
+        nums = re.findall(r'\d+', str(val))
+        return int(nums[0]) if nums else default
+
     try:
-        sys = int(str(td_sistolik).strip()) if td_sistolik else 120
-        dia = int(str(td_diastolik).strip()) if td_diastolik else 80
-        # Filter digit untuk menangani string seperti "140 bpm"
-        digits = ''.join(filter(str.isdigit, str(djj)))
-        d = int(digits) if digits else 140
-    except ValueError:
+        # More robust parsing using regex to extract numbers from strings like "120 mmHg"
+        sys = pick_int(td_sistolik, 0)
+        dia = pick_int(td_diastolik, 0)
+        d = pick_int(djj, 0)
+    except Exception as e:
+        logger.error(f"Error parsing risk data: {e}")
         return {'status': 'Hijau', 'label': 'Risiko Rendah (Data Tidak Lengkap)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
 
     if sys >= 160 or dia >= 110 or (d > 0 and (d < 100 or d > 170)):
@@ -78,10 +93,23 @@ def hitung_risiko_kehamilan(td_sistolik, td_diastolik, djj):
         return {'status': 'Hijau', 'label': 'Risiko Rendah (Normal)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
+def get_db():
+    if 'db' not in g:
+        g.db = db()
+    return g.db
+
+@app.teardown_appcontext
+def close_db(e=None):
+    db_conn = g.pop('db', None)
+    if db_conn is not None:
+        db_conn.close()
 
 def now():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -155,7 +183,7 @@ def qr_data_uri(text):
 
 
 def init_db():
-    conn = db()
+    conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.executescript('''
         PRAGMA foreign_keys=ON;
@@ -280,6 +308,9 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         );
     ''')
+    # Create indexes for performance
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_rm ON patients(nomor_rekam_medis)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_soap_patient ON soap_records(patient_id)")
 
     cur.execute('''
         CREATE TABLE IF NOT EXISTS master_options (
@@ -345,10 +376,9 @@ def current_user():
     uid = session.get('user_id')
     if not uid:
         return None
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT * FROM users WHERE id=? AND active=1', (uid,))
     row = cur.fetchone()
-    conn.close()
     return row
 
 
@@ -356,10 +386,10 @@ def log_action(action, details=''):
     user = current_user()
     uid = user['id'] if user else None
     uname = user['username'] if user else 'guest'
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('INSERT INTO audit_logs (user_id,username,action,details,ip_address,created_at) VALUES (?,?,?,?,?,?)',
                 (uid, uname, action, details[:2000], request.headers.get('X-Forwarded-For', request.remote_addr or '-'), now()))
-    conn.commit(); conn.close()
+    conn.commit()
 
 
 def role_required(*roles):
@@ -388,9 +418,9 @@ def patient_allowed(patient):
 
 
 def get_patient(pid):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT * FROM patients WHERE id=?', (pid,))
-    row = cur.fetchone(); conn.close()
+    row = cur.fetchone()
     return row
 
 
@@ -400,29 +430,26 @@ def api_patient_search():
     q = request.args.get('q', '').strip()
     if not q or len(q) < 2:
         return {'results': []}
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     like = '%' + q + '%'
     cur.execute("SELECT id,nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,created_at FROM patients WHERE nama_pasien LIKE ? OR nomor_rekam_medis LIKE ? OR nik LIKE ? OR nomor_hp LIKE ? ORDER BY nama_pasien LIMIT 20", (like, like, like, like))
-    rows = [dict(r) for r in cur.fetchall()]; conn.close()
+    rows = [dict(r) for r in cur.fetchall()]
     return {'results': rows}
-
 
 @app.route('/api/patient_by_id/<int:patient_id>')
 @role_required('superadmin', 'admin')
 def api_patient_by_id(patient_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT id,nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,created_at FROM patients WHERE id=?", (patient_id,))
-    row = cur.fetchone(); conn.close()
+    row = cur.fetchone()
     if not row:
         return {'result': None}
     return {'result': dict(row)}
 
-
-
 @app.route('/api/fetal_growth/<int:patient_id>')
 @role_required('superadmin', 'admin', 'dokter')
 def api_fetal_growth(patient_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('''
         SELECT created_at, detak_jantung_janin, estimasi_berat_janin, usia_kehamilan 
         FROM soap_records 
@@ -430,7 +457,6 @@ def api_fetal_growth(patient_id):
         ORDER BY created_at ASC
     ''', (patient_id,))
     rows = cur.fetchall()
-    conn.close()
     
     labels = []
     djj_data = []
@@ -454,9 +480,9 @@ def api_fetal_growth(patient_id):
 
 @app.route('/api/master_options')
 def api_master_options():
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT category, options_text FROM master_options')
-    rows = cur.fetchall(); conn.close()
+    rows = cur.fetchall()
     result = {}
     for r in rows:
         opts = [o.strip() for o in (r['options_text'] or '').split(',') if o.strip()]
@@ -467,10 +493,9 @@ def api_master_options():
 @app.route('/api/patient_visits/<int:patient_id>')
 @role_required('superadmin', 'admin')
 def api_patient_visits(patient_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM soap_records WHERE patient_id=?', (patient_id,))
     count = cur.fetchone()[0]
-    conn.close()
     return {'count': count}
 
 
@@ -1440,14 +1465,13 @@ html.light table th { background: rgba(240,245,251,.95) !important; }
 @app.route('/appointments')
 @role_required('superadmin','admin','dokter','pasien')
 def appointments():
-    conn = db()
+    conn = get_db()
     rows = conn.execute("""
         SELECT a.*, p.nama_pasien, p.nomor_rekam_medis
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id
         ORDER BY a.appointment_date DESC
     """).fetchall()
-    conn.close()
 
     body = """
     <div class="card">
@@ -1489,7 +1513,7 @@ def appointments():
 @app.route('/appointments/add', methods=['GET', 'POST'])
 @role_required('superadmin', 'admin', 'dokter')
 def add_appointment():
-    conn = db()
+    conn = get_db()
 
     if request.method == 'POST':
         patient_id = request.form.get('patient_id')
@@ -1504,7 +1528,6 @@ def add_appointment():
         """, (patient_id, doctor_name, appointment_date, complaint))
 
         conn.commit()
-        conn.close()
 
         flash('Appointment berhasil ditambahkan.', 'success')
         return redirect(url_for('appointments'))
@@ -1514,7 +1537,6 @@ def add_appointment():
         FROM patients
         ORDER BY created_at DESC
     """).fetchall()
-    conn.close()
 
     body = """
     <div class="card">
@@ -1558,13 +1580,12 @@ def add_appointment():
 @app.route('/export-patients')
 @role_required('superadmin', 'admin')
 def export_patients():
-    conn = db()
+    conn = get_db()
     rows = conn.execute("""
         SELECT nama_pasien, nomor_rekam_medis, nomor_hp, alamat, created_at
         FROM patients
         ORDER BY created_at DESC
     """).fetchall()
-    conn.close()
 
     import csv
     from io import StringIO
@@ -1598,7 +1619,7 @@ def export_patients():
 @app.route('/api/dashboard-stats')
 @role_required('superadmin','admin','dokter','pasien')
 def dashboard_stats_api():
-    conn = db()
+    conn = get_db()
 
     total_patients = conn.execute(
         "SELECT COUNT(*) FROM patients"
@@ -1611,8 +1632,6 @@ def dashboard_stats_api():
     total_appointments = conn.execute(
         "SELECT COUNT(*) FROM appointments"
     ).fetchone()[0]
-
-    conn.close()
 
     return {
         "total_patients": total_patients,
@@ -1638,9 +1657,9 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        conn = db(); cur = conn.cursor()
+        conn = get_db(); cur = conn.cursor()
         cur.execute('SELECT * FROM users WHERE username=? AND active=1', (username,))
-        user = cur.fetchone(); conn.close()
+        user = cur.fetchone()
         if user and check_password_hash(user['password_hash'], password):
             session['user_id'] = user['id']; session['role'] = user['role']
             log_action('LOGIN', 'Login berhasil: ' + username)
@@ -1743,11 +1762,11 @@ def logout():
 @role_required('superadmin', 'admin', 'dokter', 'pasien')
 def dashboard():
     user = current_user()
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     if user['role'] == 'pasien' and user['patient_id']:
         cur.execute('SELECT * FROM patients WHERE id=?', (user['patient_id'],)); patient = cur.fetchone()
         cur.execute('SELECT COUNT(*) FROM uploads WHERE patient_id=?', (user['patient_id'],)); total_upload = cur.fetchone()[0]
-        cur.execute('SELECT * FROM soap_records WHERE patient_id=? ORDER BY created_at DESC LIMIT 5', (user['patient_id'],)); soaps = cur.fetchall(); conn.close()
+        cur.execute('SELECT * FROM soap_records WHERE patient_id=? ORDER BY created_at DESC LIMIT 5', (user['patient_id'],)); soaps = cur.fetchall()
         body = '''
         <div class="hero card"><div><h3 style="margin:0">Halo, {{ user['full_name'] or user['username'] }}</h3><p class="muted">Dashboard pasien untuk melihat ringkasan pemeriksaan dan link hasil.</p>{% if patient %}<div class="pill-list"><span class="pill">No RM: {{ patient['nomor_rekam_medis'] }}</span><span class="pill">Status: {{ patient['status_antrian'] }}</span><span class="pill">Total hasil: {{ total_upload }}</span></div>{% endif %}</div></div>
         {% if patient %}
@@ -1790,7 +1809,7 @@ def dashboard():
     else:
         cur.execute('SELECT * FROM patients ORDER BY created_at DESC LIMIT 8')
     patients_rows = cur.fetchall()
-    cur.execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8'); audits = cur.fetchall(); conn.close()
+    cur.execute('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8'); audits = cur.fetchall()
 
     body = r'''
     <div class="space-y-6">
@@ -2014,10 +2033,10 @@ def dashboard():
 @app.route('/antrian')
 @role_required('superadmin', 'admin', 'dokter')
 def antrian():
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     # Hanya tampilkan antrian aktif (menunggu/diperiksa) urut dari yang paling lama (FIFO)
     cur.execute("SELECT * FROM patients WHERE status_antrian IN ('menunggu','diperiksa') ORDER BY created_at ASC")
-    rows = cur.fetchall(); conn.close()
+    rows = cur.fetchall()
     body = '''
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -2062,7 +2081,7 @@ def patients():
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     # Hanya ambil kolom yang diperlukan, bukan SELECT * — lebih cepat & hemat memori
     select_cols = "id, nama_pasien, nomor_rekam_medis, nik, nomor_hp, jenis_layanan, dokter_tujuan, status_antrian, created_at, tanggal_lahir, umur"
     cur.execute("SELECT full_name,username FROM users WHERE role='dokter' AND active=1 ORDER BY full_name,username"); doctors = cur.fetchall()
@@ -2097,7 +2116,7 @@ def patients():
     
     # DATA query — hanya ambil 20 baris + kolom minimal
     sql = 'SELECT ' + select_cols + ' FROM patients ' + where + order + ' LIMIT ? OFFSET ?'
-    cur.execute(sql, tuple(params) + (per_page, offset)); rows = cur.fetchall(); conn.close()
+    cur.execute(sql, tuple(params) + (per_page, offset)); rows = cur.fetchall()
     
     # Hitung end_count untuk display (hindari min() yang tidak ada di Jinja2)
     end_count = offset + per_page
@@ -2264,7 +2283,7 @@ def patients():
 @app.route('/patients/new', methods=['GET', 'POST'])
 @role_required('superadmin', 'admin')
 def patient_new():
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT full_name,username FROM users WHERE role='dokter' AND active=1 ORDER BY full_name,username"); doctors = cur.fetchall()
     # Load master options untuk dropdown
     cur.execute('SELECT category, options_text FROM master_options')
@@ -2310,7 +2329,6 @@ def patient_new():
                 return redirect(url_for('patient_detail', patient_id=pid))
             except sqlite3.IntegrityError:
                 flash('Nomor rekam medis sudah digunakan.', 'danger')
-    conn.close()
     body = '''
     <div class="card" style="margin-bottom:16px">
       <h3 style="margin:0">Cari & Edit Pasien Lama</h3>
@@ -2531,7 +2549,7 @@ def patient_detail(patient_id):
     if not patient: abort(404)
     if not patient_allowed(patient): abort(403)
     user = current_user()
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     if request.method == 'POST':
         action = request.form.get('action', '')
         if action == 'update_status' and user['role'] in ('superadmin','admin','dokter'):
@@ -2591,7 +2609,7 @@ def patient_detail(patient_id):
     cur.execute('SELECT st.*, u.full_name doctor_name, u.username doctor_username FROM soap_records st LEFT JOIN users u ON st.doctor_id=u.id WHERE st.patient_id=? ORDER BY st.created_at DESC', (patient_id,)); soaps = cur.fetchall()
     cur.execute('SELECT * FROM uploads WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); files = cur.fetchall()
     cur.execute('SELECT * FROM billing WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); bills = cur.fetchall()
-    cur.execute('SELECT * FROM soap_templates ORDER BY id DESC'); templates = cur.fetchall(); conn.close()
+    cur.execute('SELECT * FROM soap_templates ORDER BY id DESC'); templates = cur.fetchall()
     public_url = request.url_root.rstrip('/') + url_for('patient_result', token=patient['access_token'])
     qr_uri = qr_data_uri(public_url)
     body = '''
@@ -2895,10 +2913,10 @@ def patient_history(patient_id):
     patient = get_patient(patient_id)
     if not patient: abort(404)
     if not patient_allowed(patient): abort(403)
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT st.*, u.full_name doctor_name, u.username doctor_username FROM soap_records st LEFT JOIN users u ON st.doctor_id=u.id WHERE st.patient_id=? ORDER BY st.created_at DESC', (patient_id,)); soaps = cur.fetchall()
     cur.execute('SELECT * FROM uploads WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); files = cur.fetchall()
-    cur.execute('SELECT * FROM billing WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); bills = cur.fetchall(); conn.close()
+    cur.execute('SELECT * FROM billing WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); bills = cur.fetchall()
     body = '''
     <div class="space-y-6">
       <!-- Header Resume Pasien -->
@@ -3101,7 +3119,7 @@ def patient_history(patient_id):
 @role_required('superadmin', 'admin', 'dokter')
 def uploads_page():
     q = request.args.get('q', '').strip()
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     sql = '''SELECT up.*, p.nama_pasien, p.nomor_rekam_medis, u.username
              FROM uploads up JOIN patients p ON up.patient_id=p.id LEFT JOIN users u ON up.uploader_id=u.id WHERE 1=1'''
     params = []
@@ -3110,7 +3128,7 @@ def uploads_page():
         sql += ' AND (p.nama_pasien LIKE ? OR p.nomor_rekam_medis LIKE ? OR up.original_filename LIKE ?)'
         params += [like, like, like]
     sql += ' ORDER BY up.created_at DESC'
-    cur.execute(sql, tuple(params)); rows = cur.fetchall(); conn.close()
+    cur.execute(sql, tuple(params)); rows = cur.fetchall()
     body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari pasien / RM / nama file..."><button class="btn btn-primary">🔍 Cari</button></form></div>
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Semua Upload Hasil USG</h3><span class="badge">{{ rows|length }} file</span></div>{% if rows %}<table><thead><tr><th>Pasien</th><th>File</th><th>Tipe</th><th>Ukuran</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r['nama_pasien'] }}</strong><div class="small muted">{{ r['nomor_rekam_medis'] }}</div></td><td>{{ r['original_filename'] }}<div class="small muted">Uploader: {{ r['username'] or '-' }}</div></td><td>{{ file_badge(r['file_ext']) }}</td><td>{{ '%.2f MB'|format((r['file_size'] or 0)/1024/1024) }}</td><td>{{ fmt_dt(r['created_at']) }}</td><td><a class="btn btn-sm" href="{{ url_for('file_view_auth', upload_id=r['id']) }}" target="_blank">Buka</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada upload.</div>{% endif %}</div>
@@ -3121,9 +3139,9 @@ def uploads_page():
 @app.route('/file/<int:upload_id>')
 @role_required('superadmin', 'admin', 'dokter', 'pasien')
 def file_view_auth(upload_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT up.*, p.id pid FROM uploads up JOIN patients p ON up.patient_id=p.id WHERE up.id=?', (upload_id,))
-    row = cur.fetchone(); conn.close()
+    row = cur.fetchone()
     if not row: abort(404)
     patient = get_patient(row['pid'])
     if not patient_allowed(patient): abort(403)
@@ -3132,14 +3150,13 @@ def file_view_auth(upload_id):
 
 @app.route('/hasil/<token>')
 def patient_result(token):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT * FROM patients WHERE access_token=?', (token,)); patient = cur.fetchone()
     if not patient:
-        conn.close(); abort(404)
+        abort(404)
     cur.execute('SELECT * FROM uploads WHERE patient_id=? ORDER BY created_at DESC', (patient['id'],)); files = cur.fetchall()
     cur.execute('SELECT st.*, u.full_name doctor_name, u.username doctor_username FROM soap_records st LEFT JOIN users u ON st.doctor_id=u.id WHERE st.patient_id=? ORDER BY st.created_at DESC LIMIT 5', (patient['id'],)); soaps = cur.fetchall()
     cur.execute('SELECT SUM(amount) FROM billing WHERE patient_id=?', (patient['id'],)); total_bill = cur.fetchone()[0] or 0
-    conn.close()
     body = '''
     <div class="authbox"><div class="card"><div class="hero"><div><h2 style="margin:0">Hasil USG Pasien</h2><div class="muted">Halaman aman berbasis token unik. Data pasien lain tidak dapat diakses dari halaman ini.</div><div class="pill-list" style="margin-top:10px"><span class="pill">Nama: {{ patient['nama_pasien'] }}</span><span class="pill">No RM: {{ patient['nomor_rekam_medis'] }}</span><span class="pill">Status: {{ patient['status_antrian'] }}</span></div></div><div class="toolbar no-print"><button class="btn btn-primary" onclick="printPage()">🖨️ Cetak Hasil</button></div></div><div class="g2 grid" style="margin-top:16px"><div class="card"><h3>Ringkasan Pemeriksaan</h3>{% if soaps %}{% set s = soaps[0] %}<div class="small muted">Pemeriksaan terbaru: {{ fmt_dt(s['created_at']) }} oleh {{ s['doctor_name'] or s['doctor_username'] or '-' }}</div><div class="wrap" style="margin-top:8px"><strong>Assessment:</strong> {{ s['assessment'] or '-' }}</div><div class="wrap"><strong>Plan:</strong> {{ s['plan'] or '-' }}</div><div class="pill-list" style="margin-top:10px"><span class="pill">Usia Kehamilan: {{ s['usia_kehamilan'] or '-' }}</span><span class="pill">DJJ: {{ s['detak_jantung_janin'] or '-' }}</span><span class="pill">Posisi: {{ s['posisi_janin'] or '-' }}</span><span class="pill">EBJ: {{ s['estimasi_berat_janin'] or '-' }}</span></div>{% if s['catatan_dokter'] %}<div class="wrap" style="margin-top:10px"><strong>Catatan Dokter:</strong> {{ s['catatan_dokter'] }}</div>{% endif %}{% if s['rekomendasi_kontrol_ulang'] %}<div class="wrap"><strong>Kontrol Ulang:</strong> {{ s['rekomendasi_kontrol_ulang'] }}</div>{% endif %}{% else %}<div class="empty">Belum ada ringkasan pemeriksaan.</div>{% endif %}</div><div class="card"><h3>Ringkasan Billing</h3><div class="stat"><div class="small muted">Total tagihan tercatat</div><div style="font-size:30px;font-weight:800">{{ rupiah(total_bill) }}</div></div><div class="small muted" style="margin-top:10px">Hubungi klinik untuk rincian pembayaran bila diperlukan.</div></div></div><div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">File Hasil USG</h3><span class="badge">{{ files|length }} file</span></div>{% if files %}<table><thead><tr><th>Nama File</th><th>Tipe</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>{% for f in files %}<tr><td>{{ f['original_filename'] }}</td><td>{{ file_badge(f['file_ext']) }}</td><td>{{ fmt_dt(f['created_at']) }}</td><td><a class="btn btn-sm" href="{{ url_for('patient_file_public', token=patient['access_token'], upload_id=f['id']) }}" target="_blank">Buka File</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada file hasil.</div>{% endif %}</div></div></div>
     '''
@@ -3148,9 +3165,9 @@ def patient_result(token):
 
 @app.route('/hasil/<token>/file/<int:upload_id>')
 def patient_file_public(token, upload_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT up.* FROM uploads up JOIN patients p ON up.patient_id=p.id WHERE up.id=? AND p.access_token=?', (upload_id, token))
-    row = cur.fetchone(); conn.close()
+    row = cur.fetchone()
     if not row: abort(404)
     return send_from_directory(UPLOAD_DIR, row['stored_filename'], as_attachment=False, download_name=row['original_filename'])
 
@@ -3159,9 +3176,9 @@ def patient_file_public(token, upload_id):
 @role_required('superadmin')
 def patient_delete(patient_id):
     user = current_user()
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("UPDATE patients SET deleted=1, deleted_at=?, deleted_by=?, status_antrian='selesai' WHERE id=?", (now(), user['id'], patient_id))
-    conn.commit(); conn.close()
+    conn.commit()
     log_action('SOFT_DELETE_PATIENT', f'Hapus (soft) pasien ID #{patient_id}')
     flash('Data pasien telah dihapus. Masih bisa dilihat di menu Arsip Pasien.', 'info')
     return redirect(url_for('patients'))
@@ -3170,9 +3187,9 @@ def patient_delete(patient_id):
 @app.route('/patients/deleted')
 @role_required('superadmin', 'admin')
 def patients_deleted():
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, nik, nomor_hp, deleted_at, deleted_by FROM patients WHERE deleted=1 ORDER BY deleted_at DESC LIMIT 100")
-    rows = cur.fetchall(); conn.close()
+    rows = cur.fetchall()
     body = '''
     <div class="space-y-4">
       <div class="card">
@@ -3217,9 +3234,9 @@ def patients_deleted():
 @app.route('/patients/<int:patient_id>/restore', methods=['POST'])
 @role_required('superadmin', 'admin')
 def patient_restore(patient_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute("UPDATE patients SET deleted=0, restored_at=?, deleted_by=NULL WHERE id=?", (now(), patient_id))
-    conn.commit(); conn.close()
+    conn.commit()
     log_action('RESTORE_PATIENT', f'Restore pasien ID #{patient_id}')
     flash('Data pasien berhasil dikembalikan.', 'success')
     return redirect(url_for('patients_deleted'))
@@ -3228,13 +3245,13 @@ def patient_restore(patient_id):
 @app.route('/soap/<int:soap_id>/delete', methods=['POST'])
 @role_required('superadmin', 'admin', 'dokter')
 def soap_delete(soap_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT patient_id FROM soap_records WHERE id=?', (soap_id,))
     row = cur.fetchone()
-    if not row: conn.close(); abort(404)
+    if not row: abort(404)
     pid = row['patient_id']
     cur.execute('DELETE FROM soap_records WHERE id=?', (soap_id,))
-    conn.commit(); conn.close()
+    conn.commit()
     log_action('DELETE_SOAP', f'Hapus SOAP ID #{soap_id}')
     flash('Catatan rekam medis berhasil dihapus.', 'info')
     return redirect(url_for('patient_detail', patient_id=pid))
@@ -3243,13 +3260,13 @@ def soap_delete(soap_id):
 @app.route('/billing/<int:billing_id>/delete', methods=['POST'])
 @role_required('superadmin', 'admin')
 def billing_delete(billing_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT patient_id FROM billing WHERE id=?', (billing_id,))
     row = cur.fetchone()
-    if not row: conn.close(); abort(404)
+    if not row: abort(404)
     pid = row['patient_id']
     cur.execute('DELETE FROM billing WHERE id=?', (billing_id,))
-    conn.commit(); conn.close()
+    conn.commit()
     log_action('DELETE_BILLING', f'Hapus item billing #{billing_id}')
     flash('Item tagihan berhasil dihapus.', 'info')
     return redirect(url_for('patient_detail', patient_id=pid))
@@ -3258,15 +3275,15 @@ def billing_delete(billing_id):
 @app.route('/file/<int:upload_id>/delete', methods=['POST'])
 @role_required('superadmin', 'admin', 'dokter')
 def file_delete(upload_id):
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT stored_filename, patient_id FROM uploads WHERE id=?', (upload_id,))
     row = cur.fetchone()
-    if not row: conn.close(); abort(404)
+    if not row: abort(404)
     pid = row['patient_id']
     path = os.path.join(UPLOAD_DIR, row['stored_filename'])
     if os.path.exists(path): os.remove(path)
     cur.execute('DELETE FROM uploads WHERE id=?', (upload_id,))
-    conn.commit(); conn.close()
+    conn.commit()
     log_action('DELETE_UPLOAD', f'Hapus file upload #{upload_id}')
     flash('File hasil USG berhasil dihapus.', 'success')
     return redirect(url_for('patient_detail', patient_id=pid))
@@ -3276,14 +3293,14 @@ def file_delete(upload_id):
 @role_required('superadmin', 'admin', 'dokter')
 def soap_templates_page():
     user = current_user()
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         if title:
             cur.execute('INSERT INTO soap_templates (title,subjective,objective,assessment,plan,created_by,created_at) VALUES (?,?,?,?,?,?,?)', (title, request.form.get('subjective','').strip(), request.form.get('objective','').strip(), request.form.get('assessment','').strip(), request.form.get('plan','').strip(), user['id'], now()))
             conn.commit(); log_action('CREATE_SOAP_TEMPLATE', title); flash('Template SOAP berhasil ditambahkan.', 'success'); return redirect(url_for('soap_templates_page'))
         flash('Judul template wajib diisi.', 'danger')
-    cur.execute('SELECT st.*, u.username FROM soap_templates st LEFT JOIN users u ON st.created_by=u.id ORDER BY st.id DESC'); rows = cur.fetchall(); conn.close()
+    cur.execute('SELECT st.*, u.username FROM soap_templates st LEFT JOIN users u ON st.created_by=u.id ORDER BY st.id DESC'); rows = cur.fetchall()
     body = '''
     <div class="g2 grid"><div class="card no-print"><h3>Tambah Template SOAP Cepat</h3><form method="post" class="grid"><div><label>Judul Template</label><input class="input" name="title" required></div><div><label>Subjective</label><textarea class="textarea" name="subjective"></textarea></div><div><label>Objective</label><textarea class="textarea" name="objective"></textarea></div><div><label>Assessment</label><textarea class="textarea" name="assessment"></textarea></div><div><label>Plan</label><textarea class="textarea" name="plan"></textarea></div><button class="btn btn-primary">💾 Simpan Template</button></form></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar Template SOAP</h3><span class="badge">{{ rows|length }} template</span></div>{% if rows %}{% for r in rows %}<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><strong>{{ r['title'] }}</strong><span class="small muted">{{ r['username'] or '-' }}</span></div><div class="wrap"><strong>S:</strong> {{ r['subjective'] or '-' }}</div><div class="wrap"><strong>O:</strong> {{ r['objective'] or '-' }}</div><div class="wrap"><strong>A:</strong> {{ r['assessment'] or '-' }}</div><div class="wrap"><strong>P:</strong> {{ r['plan'] or '-' }}</div></div>{% endfor %}{% else %}<div class="empty">Belum ada template.</div>{% endif %}</div></div>
     '''
@@ -3395,11 +3412,11 @@ def sop_page():
 @role_required('superadmin', 'admin')
 def billing_page():
     q = request.args.get('q', '').strip()
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     sql = 'SELECT b.*, p.nama_pasien, p.nomor_rekam_medis FROM billing b JOIN patients p ON b.patient_id=p.id WHERE 1=1'; params = []
     if q:
         like = '%' + q + '%'; sql += ' AND (p.nama_pasien LIKE ? OR p.nomor_rekam_medis LIKE ? OR b.item_name LIKE ?)'; params += [like, like, like]
-    sql += ' ORDER BY b.created_at DESC'; cur.execute(sql, tuple(params)); rows = cur.fetchall(); conn.close()
+    sql += ' ORDER BY b.created_at DESC'; cur.execute(sql, tuple(params)); rows = cur.fetchall()
     body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari pasien / RM / item billing..."><button class="btn btn-primary">🔍 Cari</button></form></div>
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Billing Klinik</h3><span class="badge">{{ rows|length }} transaksi</span></div>{% if rows %}<div class="table-wrap"><table><thead><tr><th>Pasien</th><th>Item</th><th>Nominal</th><th>Status</th><th>Tanggal</th><th class="action-col">Aksi</th></tr></thead><tbody>{% for r in rows %}<tr><td><strong>{{ r['nama_pasien'] }}</strong><div class="small muted">{{ r['nomor_rekam_medis'] }}</div></td><td>{{ r['item_name'] }}<div class="small muted">{{ r['notes'] or '' }}</div></td><td>{{ rupiah(r['amount']) }}</td><td><span class="badge {{ 'paid' if r['status_bayar']=='lunas' else 'unpaid' }}">{{ r['status_bayar'] }}</span></td><td>{{ fmt_dt(r['created_at']) }}</td><td class="action-col"><div class="action-buttons">{% if r['status_bayar'] != 'lunas' %}<form method="post" action="{{ url_for('billing_set_lunas', billing_id=r['id']) }}"><button class="btn btn-primary btn-sm">✅ Lunas</button></form>{% else %}<span class="badge paid">Sudah Lunas</span>{% endif %}</div></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty">Belum ada billing.</div>{% endif %}</div>
@@ -3411,11 +3428,10 @@ def billing_page():
 @app.route('/billing/<int:billing_id>/set_lunas', methods=['POST'])
 @role_required('superadmin','admin')
 def billing_set_lunas(billing_id):
-    conn = db()
+    conn = get_db()
     cur = conn.cursor()
     cur.execute("UPDATE billing SET status_bayar='lunas' WHERE id=?", (billing_id,))
     conn.commit()
-    conn.close()
     flash('Billing berhasil ditandai lunas.', 'success')
     return redirect(request.referrer or url_for('billing_page'))
 
@@ -3423,7 +3439,7 @@ def billing_set_lunas(billing_id):
 @app.route('/users', methods=['GET', 'POST'])
 @role_required('superadmin')
 def users_page():
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     if request.method == 'POST':
         username = request.form.get('username','').strip(); full_name = request.form.get('full_name','').strip(); role = request.form.get('role','').strip(); password = request.form.get('password','').strip(); patient_id = request.form.get('patient_id','').strip() or None
         if not username or not password or role not in ('superadmin','admin','dokter','pasien'):
@@ -3435,7 +3451,7 @@ def users_page():
             except sqlite3.IntegrityError:
                 flash('Username sudah dipakai.', 'danger')
     cur.execute('SELECT id,nama_pasien,nomor_rekam_medis FROM patients ORDER BY nama_pasien'); patients_list = cur.fetchall()
-    cur.execute('SELECT * FROM users ORDER BY id DESC'); rows = cur.fetchall(); conn.close()
+    cur.execute('SELECT * FROM users ORDER BY id DESC'); rows = cur.fetchall()
     body = '''
     <div class="g2 grid"><div class="card no-print"><h3>Tambah User</h3><form method="post" class="grid"><div><label>Username</label><input class="input" name="username" required></div><div><label>Nama Lengkap</label><input class="input" name="full_name"></div><div><label>Password</label><input class="input" type="password" name="password" required></div><div><label>Role</label><select class="select" name="role"><option value="admin">admin</option><option value="dokter">dokter</option><option value="pasien">pasien</option><option value="superadmin">superadmin</option></select></div><div><label>Tautkan ke pasien (opsional untuk role pasien)</label><select class="select" name="patient_id"><option value="">- Tidak ditautkan -</option>{% for p in patients_list %}<option value="{{ p['id'] }}">{{ p['nama_pasien'] }} - {{ p['nomor_rekam_medis'] }}</option>{% endfor %}</select></div><button class="btn btn-primary">👤 Simpan User</button></form></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Daftar User</h3><span class="badge">{{ rows|length }} user</span></div><table><thead><tr><th>Username</th><th>Role</th><th>Nama</th><th>Patient ID</th><th>Aktif</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{ r['username'] }}</td><td>{{ r['role'] }}</td><td>{{ r['full_name'] or '-' }}</td><td>{{ r['patient_id'] or '-' }}</td><td>{{ 'Ya' if r['active'] else 'Tidak' }}</td></tr>{% endfor %}</tbody></table></div></div>
     '''
@@ -3445,10 +3461,10 @@ def users_page():
 @app.route('/audit-logs')
 @role_required('superadmin', 'admin')
 def audit_logs_page():
-    q = request.args.get('q', '').strip(); conn = db(); cur = conn.cursor(); sql = 'SELECT * FROM audit_logs WHERE 1=1'; params = []
+    q = request.args.get('q', '').strip(); conn = get_db(); cur = conn.cursor(); sql = 'SELECT * FROM audit_logs WHERE 1=1'; params = []
     if q:
         like = '%' + q + '%'; sql += ' AND (username LIKE ? OR action LIKE ? OR details LIKE ?)'; params += [like, like, like]
-    sql += ' ORDER BY id DESC LIMIT 300'; cur.execute(sql, tuple(params)); rows = cur.fetchall(); conn.close()
+    sql += ' ORDER BY id DESC LIMIT 300'; cur.execute(sql, tuple(params)); rows = cur.fetchall()
     body = '''
     <div class="card no-print"><form class="searchbox"><input class="input" name="q" value="{{ q }}" placeholder="Cari username / action / detail..."><button class="btn btn-primary">🔍 Cari</button></form></div>
     <div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0">Audit Log Aktivitas</h3><span class="badge">max 300</span></div>{% if rows %}<table><thead><tr><th>Waktu</th><th>User</th><th>Aksi</th><th>Detail</th><th>IP</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{ fmt_dt(r['created_at']) }}</td><td>{{ r['username'] or '-' }}</td><td><strong>{{ r['action'] }}</strong></td><td>{{ r['details'] or '' }}</td><td>{{ r['ip_address'] or '-' }}</td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">Belum ada aktivitas audit.</div>{% endif %}</div>
@@ -3465,12 +3481,12 @@ def settings():
 
         # Update master options (superadmin/admin only)
         if action == 'save_master_opts' and user['role'] in ('superadmin', 'admin'):
-            conn = db(); cur = conn.cursor()
+            conn = get_db(); cur = conn.cursor()
             for cat in ['golongan_darah', 'jenis_layanan', 'pekerjaan']:
                 val = request.form.get(cat, '').strip()
                 if val:
                     cur.execute('INSERT OR REPLACE INTO master_options(category, options_text) VALUES(?,?)', (cat, val))
-            conn.commit(); conn.close()
+            conn.commit()
             log_action('UPDATE_MASTER_OPTS', 'Master options diperbarui')
             flash('Opsi dropdown berhasil diperbarui.', 'success')
             return redirect(url_for('settings'))
@@ -3481,9 +3497,9 @@ def settings():
             if not new_name:
                 flash('Nama tidak boleh kosong.', 'danger')
             elif new_name != user['full_name']:
-                conn = db(); cur = conn.cursor()
+                conn = get_db(); cur = conn.cursor()
                 cur.execute('UPDATE users SET full_name=?, updated_at=? WHERE id=?', (new_name, now(), user['id']))
-                conn.commit(); conn.close()
+                conn.commit()
                 log_action('UPDATE_PROFILE', 'Nama diubah menjadi: ' + new_name)
                 flash('Nama profil berhasil diperbarui.', 'success')
                 return redirect(url_for('settings'))
@@ -3498,12 +3514,12 @@ def settings():
             elif new != conf:
                 flash('Konfirmasi password tidak cocok.', 'danger')
             else:
-                conn = db(); cur = conn.cursor(); cur.execute('UPDATE users SET password_hash=?, updated_at=? WHERE id=?', (generate_password_hash(new), now(), user['id'])); conn.commit(); conn.close(); log_action('CHANGE_PASSWORD', user['username']); flash('Password berhasil diubah.', 'success'); return redirect(url_for('settings'))
+                conn = get_db(); cur = conn.cursor(); cur.execute('UPDATE users SET password_hash=?, updated_at=? WHERE id=?', (generate_password_hash(new), now(), user['id'])); conn.commit(); log_action('CHANGE_PASSWORD', user['username']); flash('Password berhasil diubah.', 'success'); return redirect(url_for('settings'))
 
     # Load master options
-    conn = db(); cur = conn.cursor()
+    conn = get_db(); cur = conn.cursor()
     cur.execute('SELECT category, options_text FROM master_options')
-    master_rows = cur.fetchall(); conn.close()
+    master_rows = cur.fetchall()
     master_opts = {r['category']: r['options_text'] for r in master_rows}
 
     body = '''
