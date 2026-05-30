@@ -456,6 +456,12 @@ def init_db():
             cur.execute('ALTER TABLE patients ADD COLUMN {} {}'.format(col, typ))
         except sqlite3.OperationalError:
             pass  # kolom sudah ada
+    # Migrasi kolom keluarga — relasi ibu & anak
+    for col, typ in [('keluarga_id', 'INTEGER'), ('hubungan', 'TEXT')]:
+        try:
+            cur.execute('ALTER TABLE patients ADD COLUMN {} {}'.format(col, typ))
+        except sqlite3.OperationalError:
+            pass  # kolom sudah ada
     conn.commit()
     conn.close()
 
@@ -585,6 +591,34 @@ def api_patient_visits(patient_id):
     cur.execute('SELECT COUNT(*) FROM soap_records WHERE patient_id=?', (patient_id,))
     count = cur.fetchone()[0]
     return {'count': count}
+
+@app.route('/api/keluarga_search')
+@role_required('superadmin', 'admin')
+def api_keluarga_search():
+    q = request.args.get('q', '').strip()
+    pid = request.args.get('pid', type=int)
+    if not q or len(q) < 2:
+        return {'results': []}
+    conn = get_db(); cur = conn.cursor()
+    like = '%' + q + '%'
+    cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, hubungan, keluarga_id FROM patients WHERE (nama_pasien LIKE ? OR nomor_rekam_medis LIKE ?) AND deleted=0 ORDER BY nama_pasien LIMIT 15", (like, like))
+    rows = [dict(r) for r in cur.fetchall()]
+    return {'results': rows}
+
+@app.route('/api/keluarga_by_id/<int:patient_id>')
+@role_required('superadmin', 'admin')
+def api_keluarga_by_id(patient_id):
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, hubungan, keluarga_id FROM patients WHERE id=? AND deleted=0", (patient_id,))
+    row = cur.fetchone()
+    if not row: return {'result': None}
+    p = dict(row)
+    if p['keluarga_id']:
+        cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, hubungan FROM patients WHERE keluarga_id=? AND id!=? AND deleted=0 ORDER BY id", (p['keluarga_id'], patient_id))
+        p['anggota'] = [dict(r) for r in cur.fetchall()]
+    else:
+        p['anggota'] = []
+    return {'result': p}
 
 
 
@@ -1501,6 +1535,7 @@ html.light table th { background: rgba(240,245,251,.95) !important; }
             <div class="nav-title">Utama</div>
             <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint=='dashboard' else '' }}"><span class="nav-icon">🏠</span><span>Dashboard</span></a>
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('antrian') }}" class="{{ 'active' if request.endpoint=='antrian' else '' }}"><span class="nav-icon">🚶</span><span>Antrian</span></a>{% endif %}
+            {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('antrian_tv') }}" target="_blank" class="{{ 'active' if request.endpoint=='antrian_tv' else '' }}"><span class="nav-icon">📺</span><span>TV Antrian</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin','dokter'] %}<a href="{{ url_for('patients') }}" class="{{ 'active' if request.endpoint in ['patients','patient_new','patient_detail','patient_history'] else '' }}"><span class="nav-icon">📚</span><span>Rekam Medis</span></a>{% endif %}
             {% if user['role'] in ['superadmin','admin'] %}<a href="{{ url_for('patient_new') }}" class="{{ 'active' if request.endpoint=='patient_new' else '' }}"><span class="nav-icon">➕</span><span>Input Pasien</span></a>{% endif %}
             <div class="nav-title">Operasional</div>
@@ -2250,13 +2285,15 @@ def antrian_tv():
     cur.execute("SELECT nama_pasien, dokter_tujuan FROM patients WHERE status_antrian='diperiksa' ORDER BY updated_at DESC LIMIT 1")
     current = cur.fetchone()
     
-    # Daftar Antrian Menunggu (5 Pasien Berikutnya)
-    cur.execute("SELECT nama_pasien, nomor_rekam_medis FROM patients WHERE status_antrian='menunggu' ORDER BY created_at ASC LIMIT 5")
+    # Daftar Antrian Menunggu (7 Pasien Berikutnya - lebih banyak)
+    cur.execute("SELECT nama_pasien, nomor_rekam_medis FROM patients WHERE status_antrian='menunggu' ORDER BY created_at ASC LIMIT 7")
     waiting = cur.fetchall()
     
     # Statistik Cepat
     cur.execute("SELECT COUNT(*) FROM patients WHERE date(created_at) = date('now')")
     total_today = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM patients WHERE status_antrian='selesai' AND date(updated_at)=date('now')")
+    done_today = cur.fetchone()[0]
 
     body_tpl = """
     <!doctype html>
@@ -2264,95 +2301,326 @@ def antrian_tv():
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Display Antrian - {{ app_name }}</title>
+      <title>TV Antrian - {{ app_name }}</title>
       <script src="https://cdn.tailwindcss.com"></script>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800;900&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
             font-family: 'Plus Jakarta Sans', sans-serif; 
-            background: #07111f;
-            background-image: radial-gradient(circle at top right, rgba(34,197,94,0.1), transparent), 
-                              radial-gradient(circle at bottom left, rgba(14,165,233,0.1), transparent);
+            background: #050f1f;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        /* Animated gradient background */
+        .tv-bg {
+            position: fixed; inset: 0;
+            background: 
+                radial-gradient(ellipse 70% 50% at 15% 10%, rgba(34,197,94,.12), transparent),
+                radial-gradient(ellipse 50% 60% at 85% 90%, rgba(14,165,233,.12), transparent),
+                radial-gradient(ellipse 40% 40% at 50% 50%, rgba(168,85,247,.05), transparent),
+                #050f1f;
+            z-index: 0;
+        }
+        /* Animated floating particles */
+        .particle {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            animation: particleFloat 12s ease-in-out infinite;
+        }
+        .particle:nth-child(1) { width: 300px; height: 300px; background: radial-gradient(circle, rgba(34,197,94,.08), transparent 70%); top: -100px; left: -100px; animation-duration: 14s; }
+        .particle:nth-child(2) { width: 250px; height: 250px; background: radial-gradient(circle, rgba(14,165,233,.08), transparent 70%); bottom: -80px; right: -80px; animation-duration: 18s; }
+        .particle:nth-child(3) { width: 180px; height: 180px; background: radial-gradient(circle, rgba(168,85,247,.06), transparent 70%); top: 40%; left: 80%; animation-duration: 16s; }
+        @keyframes particleFloat {
+            0%,100% { transform: translate(0,0) scale(1); }
+            25% { transform: translate(30px,-20px) scale(1.05); }
+            50% { transform: translate(-20px,10px) scale(.95); }
+            75% { transform: translate(10px,30px) scale(1.02); }
+        }
+        /* Grid dots overlay */
+        .tv-grid {
+            position: fixed; inset: 0; z-index: 0;
+            background-image: radial-gradient(rgba(255,255,255,.04) 1px, transparent 1px);
+            background-size: 50px 50px;
+            mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, #000 30%, transparent 100%);
+        }
+        .tv-content { position: relative; z-index: 1; height: 100vh; display: flex; flex-direction: column; padding: 1.5rem; gap: 1.5rem; }
+        
+        /* Header */
+        .tv-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 2rem;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.06);
+            border-radius: 2rem;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 60px rgba(0,0,0,.3);
+            flex-shrink: 0;
+        }
+        .tv-brand { display: flex; align-items: center; gap: 1.2rem; }
+        .tv-logo {
+            width: 56px; height: 56px;
+            background: linear-gradient(135deg, #22c55e, #0ea5e9);
+            border-radius: 1rem;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; font-weight: 900; color: #fff;
+            box-shadow: 0 10px 30px rgba(34,197,94,.3);
+        }
+        .tv-clock { 
+            font-size: 3.5rem; font-weight: 900; font-family: monospace;
+            color: #fff; line-height: 1;
+            text-shadow: 0 0 40px rgba(14,165,233,.3);
+        }
+        .tv-date { color: rgba(255,255,255,.4); font-weight: 700; letter-spacing: .1em; font-size: .8rem; text-align: right; }
+
+        /* Main grid */
+        .tv-main { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; min-height: 0; }
+
+        /* Left panel - Current patient */
+        .tv-current {
+            display: flex; flex-direction: column;
+            background: linear-gradient(135deg, rgba(34,197,94,.08), rgba(34,197,94,.02));
+            border: 1px solid rgba(34,197,94,.15);
+            border-radius: 2.5rem;
+            padding: 2.5rem;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            position: relative;
+            overflow: hidden;
+        }
+        .tv-current::before {
+            content: '';
+            position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: conic-gradient(from 0deg, transparent, rgba(34,197,94,.03), transparent, rgba(14,165,233,.03), transparent);
+            animation: rotateBg 20s linear infinite;
+        }
+        @keyframes rotateBg { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .tv-current-inner { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1rem; }
+        
+        .tv-badge {
+            display: inline-flex; align-items: center; gap: .6rem;
+            padding: .6rem 1.5rem;
+            background: #22c55e; color: #050f1f;
+            border-radius: 100px;
+            font-weight: 900; font-size: .85rem;
+            letter-spacing: .15em;
+            text-transform: uppercase;
+            box-shadow: 0 8px 30px rgba(34,197,94,.3);
+            animation: badgePulse 2s ease-in-out infinite;
+        }
+        @keyframes badgePulse {
+            0%,100% { box-shadow: 0 8px 30px rgba(34,197,94,.3); }
+            50% { box-shadow: 0 8px 50px rgba(34,197,94,.6); }
+        }
+        
+        .tv-patient-label { color: rgba(255,255,255,.35); font-weight: 800; font-size: .85rem; letter-spacing: .3em; text-transform: uppercase; margin-top: .5rem; }
+        .tv-patient-name {
+            font-size: clamp(3rem, 6vw, 6rem);
+            font-weight: 900;
+            color: #fff;
+            line-height: 1.1;
+            text-shadow: 0 4px 30px rgba(0,0,0,.3);
+        }
+        .tv-divider { width: 120px; height: 3px; background: linear-gradient(90deg, #22c55e, #0ea5e9); border-radius: 10px; opacity: .5; margin: .5rem 0; }
+        .tv-doctor-label { color: rgba(255,255,255,.35); font-weight: 800; font-size: .8rem; letter-spacing: .3em; text-transform: uppercase; }
+        .tv-doctor-name { 
+            font-size: 1.8rem; font-weight: 800; 
+            background: linear-gradient(135deg, #0ea5e9, #22c55e);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Stats bar */
+        .tv-stats {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
+            padding: 1rem 1.5rem;
+            background: rgba(255,255,255,.03);
+            border: 1px solid rgba(255,255,255,.06);
+            border-radius: 1.5rem;
+            margin-top: auto;
+            position: relative; z-index: 1;
+        }
+        .tv-stat { text-align: center; }
+        .tv-stat-value { font-size: 2rem; font-weight: 900; line-height: 1.2; }
+        .tv-stat-label { font-size: .65rem; color: rgba(255,255,255,.35); font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+
+        /* Right panel - Queue list */
+        .tv-queue {
+            background: rgba(255,255,255,.03);
+            border: 1px solid rgba(255,255,255,.06);
+            border-radius: 2.5rem;
+            padding: 2rem;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .tv-queue-title {
+            display: flex; align-items: center; gap: .8rem;
+            font-size: 1.2rem; font-weight: 900; color: #0ea5e9;
+            margin-bottom: 1.5rem;
+            flex-shrink: 0;
+        }
+        .tv-queue-title .bar { width: 4px; height: 24px; background: #0ea5e9; border-radius: 10px; box-shadow: 0 0 20px rgba(14,165,233,.4); }
+
+        .tv-queue-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: .6rem; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent; }
+        .tv-queue-list::-webkit-scrollbar { width: 4px; }
+        .tv-queue-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 10px; }
+
+        .tv-q-item {
+            display: flex; align-items: center; gap: 1rem;
+            padding: 1rem 1.2rem;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.05);
+            border-radius: 1.2rem;
+            transition: all .3s ease;
+            animation: slideIn .4s ease both;
+        }
+        .tv-q-item:nth-child(1) { animation-delay: .05s; }
+        .tv-q-item:nth-child(2) { animation-delay: .10s; }
+        .tv-q-item:nth-child(3) { animation-delay: .15s; }
+        .tv-q-item:nth-child(4) { animation-delay: .20s; }
+        .tv-q-item:nth-child(5) { animation-delay: .25s; }
+        .tv-q-item:nth-child(6) { animation-delay: .30s; }
+        .tv-q-item:nth-child(7) { animation-delay: .35s; }
+        @keyframes slideIn { from { opacity:0; transform:translateX(-20px); } to { opacity:1; transform:none; } }
+        
+        .tv-q-num {
+            width: 48px; height: 48px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(14,165,233,.12);
+            border-radius: 1rem;
+            font-size: 1.3rem; font-weight: 900; color: #0ea5e9;
+            transition: all .3s;
+        }
+        .tv-q-item:hover { background: rgba(34,197,94,.08); border-color: rgba(34,197,94,.15); }
+        .tv-q-item:hover .tv-q-num { background: #22c55e; color: #050f1f; }
+        .tv-q-name { font-size: 1.2rem; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tv-q-rm { font-size: .75rem; color: rgba(255,255,255,.3); font-family: monospace; margin-top: 2px; }
+
+        .tv-empty {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,.2); font-size: 1.5rem; font-style: italic;
+        }
+
+        /* Footer */
+        .tv-footer {
+            text-align: center; padding: .5rem;
+            color: rgba(255,255,255,.15); font-size: .6rem;
+            font-weight: 700; letter-spacing: .5em; text-transform: uppercase;
+            flex-shrink: 0;
+            animation: footerPulse 3s ease-in-out infinite;
+        }
+        @keyframes footerPulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .tv-main { grid-template-columns: 1fr; }
+            .tv-patient-name { font-size: clamp(2rem, 5vw, 4rem); }
+            .tv-clock { font-size: 2.5rem; }
+            .tv-content { padding: 1rem; gap: 1rem; }
         }
       </style>
     </head>
-    <body class="min-h-screen text-white p-10 flex flex-col gap-10 overflow-hidden">
-        <header class="flex justify-between items-center bg-white/5 p-8 rounded-[2.5rem] border border-white/10 backdrop-blur-2xl shadow-2xl">
-            <div class="flex items-center gap-6">
-                <div class="w-20 h-20 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-3xl flex items-center justify-center text-4xl font-black shadow-lg">USG</div>
-                <div>
-                    <h1 class="text-5xl font-black tracking-tight leading-tight">DISPLAY ANTRIAN</h1>
-                    <p class="text-emerald-400 font-bold uppercase tracking-[0.3em] text-sm">Klinik Arissa &bull; USG 4D Premium</p>
+    <body>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="tv-grid"></div>
+        <div class="tv-bg"></div>
+        
+        <div class="tv-content">
+            <!-- Header -->
+            <header class="tv-header">
+                <div class="tv-brand">
+                    <div class="tv-logo">USG</div>
+                    <div>
+                        <div style="font-size:1.6rem;font-weight:900;color:#fff;letter-spacing:-.5px;line-height:1.2">{{ app_name }}</div>
+                        <div style="font-size:.7rem;color:rgba(255,255,255,.3);font-weight:700;letter-spacing:.2em">SISTEM INFORMASI ANTRIAN</div>
+                    </div>
                 </div>
-            </div>
-            <div class="text-right">
-                <div id="tv-clock" class="text-7xl font-black font-mono text-white mb-2">00:00:00</div>
-                <div class="text-slate-400 font-bold uppercase tracking-widest text-lg">{{ today_label }}</div>
-            </div>
-        </header>
+                <div class="text-right">
+                    <div id="tv-clock" class="tv-clock">00:00:00</div>
+                    <div class="tv-date">{{ today_label }}</div>
+                </div>
+            </header>
 
-        <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-10">
-            <!-- KIRI: PASIEN YANG DIPANGGIL -->
-            <div class="lg:col-span-7 flex flex-col gap-8">
-                <div class="flex-1 bg-gradient-to-br from-emerald-600/10 to-emerald-900/30 border-2 border-emerald-500/20 rounded-[4rem] p-16 flex flex-col items-center justify-center text-center shadow-2xl relative">
-                    <div class="absolute top-10 left-10 px-8 py-3 bg-emerald-500 text-slate-950 rounded-full font-black text-lg tracking-[0.2em] animate-pulse shadow-lg shadow-emerald-500/20">SEDANG DIPERIKSA</div>
-                    
+            <!-- Main -->
+            <div class="tv-main">
+                <!-- Current Patient -->
+                <div class="tv-current">
                     {% if current %}
-                        <div class="text-slate-400 text-2xl font-bold uppercase tracking-[0.3em] mb-6">NAMA PASIEN</div>
-                        <h2 class="text-8xl md:text-9xl font-black text-white mb-10 drop-shadow-2xl">{{ current['nama_pasien'] }}</h2>
-                        <div class="w-48 h-2 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full mb-10 opacity-50"></div>
-                        <div class="text-slate-400 text-xl font-bold uppercase tracking-[0.3em] mb-4">DOKTER TUJUAN</div>
-                        <div class="text-5xl font-extrabold text-cyan-400 bg-cyan-400/10 px-8 py-4 rounded-3xl border border-cyan-400/20">{{ current['dokter_tujuan'] or '-' }}</div>
-                    {% else %}
-                        <div class="text-slate-500 text-4xl font-bold italic opacity-50">Menunggu Pasien Berikutnya...</div>
+                    <div style="position:absolute;top:1.5rem;left:1.5rem;z-index:2">
+                        <span class="tv-badge">🔴 LIVE &bull; SEDANG DIPERIKSA</span>
+                    </div>
                     {% endif %}
-                </div>
-                
-                <div class="bg-white/5 border border-white/10 rounded-[3rem] p-10 flex justify-around items-center shadow-xl">
-                    <div class="text-center">
-                        <div class="text-slate-500 text-sm font-black uppercase tracking-[0.3em] mb-2">Total Pasien</div>
-                        <div class="text-7xl font-black text-white">{{ total_today }}</div>
-                    </div>
-                    <div class="w-px h-24 bg-white/10"></div>
-                    <div class="text-center">
-                        <div class="text-slate-500 text-sm font-black uppercase tracking-[0.3em] mb-2">Daftar Tunggu</div>
-                        <div class="text-7xl font-black text-amber-500">{{ waiting|length }}</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- KANAN: DAFTAR ANTRIAN BERIKUTNYA -->
-            <div class="lg:col-span-5 flex flex-col gap-8">
-                <div class="flex-1 bg-white/5 border border-white/10 rounded-[4rem] p-12 backdrop-blur-3xl shadow-2xl overflow-hidden relative">
-                    <h3 class="text-3xl font-black mb-10 px-2 flex items-center gap-4 text-cyan-400">
-                        <span class="w-3 h-10 bg-cyan-500 rounded-full shadow-lg shadow-cyan-500/50"></span>
-                        ANTRIAN BERIKUTNYA
-                    </h3>
                     
-                    <div class="space-y-6">
+                    <div class="tv-current-inner">
+                        {% if current %}
+                            <div class="tv-patient-label">Nama Pasien</div>
+                            <div class="tv-patient-name">{{ current['nama_pasien'] }}</div>
+                            <div class="tv-divider"></div>
+                            <div class="tv-doctor-label">Dokter Tujuan</div>
+                            <div class="tv-doctor-name">{{ current['dokter_tujuan'] or '—' }}</div>
+                        {% else %}
+                            <div style="font-size:4rem;margin-bottom:1rem;opacity:.3">🛋️</div>
+                            <div style="font-size:2rem;font-weight:800;color:rgba(255,255,255,.25);">Menunggu Pasien Berikutnya</div>
+                            <div style="font-size:.9rem;color:rgba(255,255,255,.15);margin-top:.5rem">Silakan menunggu, kami akan segera memanggil Anda</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="tv-stats">
+                        <div class="tv-stat">
+                            <div class="tv-stat-value" style="color:#22c55e">{{ total_today }}</div>
+                            <div class="tv-stat-label">Total Hari Ini</div>
+                        </div>
+                        <div class="tv-stat">
+                            <div class="tv-stat-value" style="color:#0ea5e9">{{ waiting|length }}</div>
+                            <div class="tv-stat-label">Menunggu</div>
+                        </div>
+                        <div class="tv-stat">
+                            <div class="tv-stat-value" style="color:#a78bfa">{{ done_today }}</div>
+                            <div class="tv-stat-label">Selesai</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Queue List -->
+                <div class="tv-queue">
+                    <div class="tv-queue-title">
+                        <span class="bar"></span>
+                        ANTRIAN BERIKUTNYA
+                        <span style="margin-left:auto;font-size:.75rem;color:rgba(255,255,255,.25);font-weight:700">{{ waiting|length }} pasien</span>
+                    </div>
+
+                    <div class="tv-queue-list">
                         {% for p in waiting %}
-                        <div class="flex items-center gap-8 p-8 bg-white/5 border border-white/5 rounded-[2.5rem] group hover:bg-emerald-500/10 hover:border-emerald-500/20 transition-all duration-300">
-                            <div class="w-24 h-24 bg-slate-800 rounded-3xl flex items-center justify-center text-4xl font-black text-cyan-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all shadow-xl">
-                                {{ loop.index }}
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="text-3xl font-black text-white truncate mb-1 group-hover:text-emerald-400 transition-colors">{{ p['nama_pasien'] }}</div>
-                                <div class="text-slate-500 font-mono text-lg tracking-tighter">{{ p['nomor_rekam_medis'] }}</div>
+                        <div class="tv-q-item">
+                            <div class="tv-q-num">{{ loop.index }}</div>
+                            <div>
+                                <div class="tv-q-name">{{ p['nama_pasien'] }}</div>
+                                <div class="tv-q-rm">{{ p['nomor_rekam_medis'] }}</div>
                             </div>
                         </div>
                         {% else %}
-                            <div class="py-32 text-center text-slate-600 italic text-2xl">Semua antrian selesai</div>
+                        <div class="tv-empty">✅ Semua antrian telah selesai</div>
                         {% endfor %}
                     </div>
                 </div>
             </div>
-        </main>
 
-        <footer class="text-center py-6 text-slate-600 font-bold uppercase tracking-[0.5em] text-[10px] animate-pulse">
-            Sistem Informasi Layanan Terpadu &bull; Klinik Arissa Premium Service
-        </footer>
+            <footer class="tv-footer">
+                Klinik Arissa USG 4D Premium &bull; Sistem Informasi Layanan Terpadu
+            </footer>
+        </div>
 
         <script>
+            // Live clock
             function updateClock() {
                 const now = new Date();
                 const h = String(now.getHours()).padStart(2, '0');
@@ -2360,14 +2628,21 @@ def antrian_tv():
                 const s = String(now.getSeconds()).padStart(2, '0');
                 document.getElementById('tv-clock').textContent = h + ":" + m + ":" + s;
             }
-            setInterval(updateClock, 1000); updateClock();
-            // Refresh halaman otomatis setiap 20 detik
-            setTimeout(() => { location.reload(); }, 20000);
+            setInterval(updateClock, 1000);
+            updateClock();
+            
+            // Auto-refresh every 15 seconds
+            setTimeout(() => { location.reload(); }, 15000);
+            
+            // Fade in on load
+            document.body.style.opacity = '0';
+            document.body.style.transition = 'opacity .6s ease';
+            window.addEventListener('load', () => { document.body.style.opacity = '1'; });
         </script>
     </body>
     </html>
     """
-    return render_template_string(body_tpl, current=current, waiting=waiting, total_today=total_today, 
+    return render_template_string(body_tpl, current=current, waiting=waiting, total_today=total_today, done_today=done_today,
                                  today_label=datetime.now().strftime("%A, %d %B %Y"), app_name=APP_NAME)
 
 
@@ -2502,6 +2777,7 @@ def patients():
           <table class="w-full text-sm">
             <thead>
               <tr class="bg-white/5 text-slate-400 uppercase text-[10px] tracking-widest border-b border-white/10">
+                <th class="px-4 py-3 text-right min-w-[120px]">Aksi</th>
                 <th class="px-4 py-3 text-left w-8">#</th>
                 <th class="px-4 py-3 text-left min-w-[140px]">Pasien</th>
                 <th class="px-4 py-3 text-left">RM</th>
@@ -2509,12 +2785,26 @@ def patients():
                 <th class="px-4 py-3 text-left hidden md:table-cell">Layanan</th>
                 <th class="px-4 py-3 text-left hidden lg:table-cell">Dokter</th>
                 <th class="px-4 py-3 text-center">Status</th>
-                <th class="px-4 py-3 text-right min-w-[120px]">Aksi</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">
               {% for p in rows %}
               <tr class="hover:bg-white/5 transition-colors">
+                <td class="px-4 py-3 text-left" style="position:sticky;left:0;z-index:3;background:var(--bg);">
+                  <div class="flex gap-1.5 flex-nowrap">
+                    <a class="btn btn-sm text-[10px] px-2 py-1 btn-primary" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="Rekam Medis">📋 RM</a>
+                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_new', edit=p['id']) }}" title="Edit">✏️</a>
+                    <form method="post" action="{{ url_for('patient_detail', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Antrikan {{ p['nama_pasien'] }}?')">
+                      <input type="hidden" name="action" value="add_to_queue">
+                      <button class="btn btn-sm btn-primary text-[10px] px-2 py-1" title="Antrikan">🚶</button>
+                    </form>
+                    {% if current_user['role'] == 'superadmin' %}
+                    <form method="post" action="{{ url_for('patient_delete', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Hapus {{ p['nama_pasien'] }}?')">
+                      <button class="btn btn-sm bg-red-600/20 text-red-400 border-red-500/30 text-[10px] px-2 py-1" title="Hapus">🗑️</button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-xs text-slate-500">{{ offset + loop.index }}</td>
                 <td class="px-4 py-3">
                   <div class="font-bold text-white text-sm">{{ p['nama_pasien'] }}</div>
@@ -2526,21 +2816,6 @@ def patients():
                 <td class="px-4 py-3 text-xs hidden lg:table-cell">{{ p['dokter_tujuan'] or '-' }}</td>
                 <td class="px-4 py-3 text-center">
                   <span class="pill text-[10px] {{ p['status_antrian'] }}">{{ p['status_antrian'] }}</span>
-                </td>
-                <td class="px-4 py-3 text-right">
-                  <div class="flex gap-1.5 justify-end flex-nowrap">
-                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_detail', patient_id=p['id']) }}" title="Detail">🔍</a>
-                    <a class="btn btn-sm text-[10px] px-2 py-1" href="{{ url_for('patient_history', patient_id=p['id']) }}" title="History">📋</a>
-                    <form method="post" action="{{ url_for('patient_detail', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Antrikan {{ p['nama_pasien'] }}?')">
-                      <input type="hidden" name="action" value="add_to_queue">
-                      <button class="btn btn-sm btn-primary text-[10px] px-2 py-1" title="Antrikan">🚶</button>
-                    </form>
-                    {% if current_user['role'] == 'superadmin' %}
-                    <form method="post" action="{{ url_for('patient_delete', patient_id=p['id']) }}" style="display:inline" onsubmit="return confirm('Hapus {{ p['nama_pasien'] }}?')">
-                      <button class="btn btn-sm bg-red-600/20 text-red-400 border-red-500/30 text-[10px] px-2 py-1" title="Hapus">🗑️</button>
-                    </form>
-                    {% endif %}
-                  </div>
                 </td>
               </tr>
               {% endfor %}
@@ -2648,6 +2923,7 @@ def patient_new():
       <h3>{{ 'Edit Pasien' if edit_patient else 'Form Input Pasien Baru' }}</h3>
       <form method="post" class="grid">
         <input type="hidden" name="edit_id" id="edit_id" value="{{ edit_patient['id'] if edit_patient else '' }}">
+        <input type="hidden" name="keluarga_id" id="fkeluarga_id" value="{{ edit_patient['keluarga_id'] if edit_patient else '' }}">
         <div class="form2">
           <div>
             <label>Nama Pasien *</label>
@@ -2699,6 +2975,26 @@ def patient_new():
               <option value="">- Pilih Dokter -</option>
               {% for d in doctors %}<option value="{{ d['full_name'] or d['username'] }}" {{ 'selected' if edit_patient and edit_patient['dokter_tujuan']==(d['full_name'] or d['username']) else '' }}>{{ d['full_name'] or d['username'] }}</option>{% endfor %}
             </select>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+            <div class="small muted font-bold mb-2">👨‍👩‍👧‍👦 DATA KELUARGA</div>
+            <div><label>Tautkan ke Ibu / Keluarga</label>
+              <input class="input" id="keluargaSearch" placeholder="Cari nama ibu / anggota keluarga..." style="width:100%">
+              <div id="keluargaResults" style="margin-top:6px;max-height:200px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:12px;display:none"></div>
+              <div id="selectedKeluarga" style="display:none;margin-top:8px;padding:10px 14px;border-radius:12px;border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.08)"></div>
+            </div>
+            <div style="margin-top:8px">
+              <label>Hubungan dalam Keluarga</label>
+              <select class="select" name="hubungan" id="fhubungan">
+                <option value="">- Pilih Hubungan -</option>
+                <option value="Ibu">Ibu</option>
+                <option value="Anak ke-1">Anak ke-1</option>
+                <option value="Anak ke-2">Anak ke-2</option>
+                <option value="Anak ke-3">Anak ke-3</option>
+                <option value="Anak ke-4">Anak ke-4</option>
+                <option value="Anak ke-5">Anak ke-5</option>
+              </select>
+            </div>
           </div>
           <div>
             <label>Status Antrian</label>
@@ -2763,6 +3059,38 @@ def patient_new():
       document.getElementById('fumur').value=usia+' tahun';
     }
     document.addEventListener('DOMContentLoaded',function(){
+      // === Keluarga search ===
+      var ks=document.getElementById('keluargaSearch');
+      var kr=document.getElementById('keluargaResults');
+      var sk=document.getElementById('selectedKeluarga');
+      var kTimer=null;
+      if(ks){
+        ks.addEventListener('input',function(){
+          clearTimeout(kTimer);
+          var v=ks.value.trim();
+          if(v.length<2){kr.style.display='none';sk.style.display='none';return;}
+          kTimer=setTimeout(function(){
+            fetch('/api/keluarga_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
+              if(!data.results||data.results.length===0){kr.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';kr.style.display='block';return;}
+              var h='';
+              data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+',\''+p.nama_pasien+'\\''+',\''+p.nomor_rekam_medis+'\\''+','+(p.keluarga_id||'null')+',\''+(p.hubungan||'')+'\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';});
+              kr.innerHTML=h;kr.style.display='block';
+            });
+          },300);
+        });
+      }
+      window.pilihKeluarga=function(id,name,rm,kid,hub){
+        kr.style.display='none';
+        document.getElementById('fkeluarga_id').value=kid||id;
+        if(!hub){
+          sk.style.display='block';
+          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm" onclick="document.getElementById(\'fkeluarga_id\').value=\'\';document.getElementById(\'selectedKeluarga\').style.display=\'none\'">✕</button></div>';
+        }else{
+          sk.style.display='block';
+          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm" onclick="document.getElementById(\'fkeluarga_id\').value=\'\';document.getElementById(\'selectedKeluarga\').style.display=\'none\'">✕</button></div>';
+        }
+      };
+      // === Existing patient search ===
       var inp=document.getElementById('searchExisting');
       var res=document.getElementById('searchResults');
       var sel=document.getElementById('selectedPatient');
@@ -2955,7 +3283,7 @@ def patient_detail(patient_id):
           <div><span class="text-slate-500 block mb-1">TB (cm)</span><span class="text-slate-200 font-bold">{{ "%.1f"|format(patient['tinggi_badan']) if patient['tinggi_badan'] else '-' }}</span></div>
           <div><span class="text-slate-500 block mb-1">BB (kg)</span><span class="text-slate-200 font-bold">{{ "%.1f"|format(patient['berat_badan']) if patient['berat_badan'] else '-' }}</span></div>
           <div><span class="text-slate-500 block mb-1">Lingkar Perut (cm)</span><span class="text-slate-200 font-bold">{{ "%.1f"|format(patient['lingkar_perut']) if patient['lingkar_perut'] else '-' }}</span></div>
-          <div><span class="text-slate-500 block mb-1">BMI</span><span class="text-slate-200 font-bold {% if patient['bmi'] and (patient['bmi']<18.5 or patient['bmi']>=25) %}text-amber-400{% else %}text-emerald-400{% endif %}">{{ "%.1f"|format(patient['bmi']) if patient['bmi'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">BMI</span><span class="text-slate-200 font-bold {% if patient['bmi'] and ((patient['bmi']|float < 18.5) or (patient['bmi']|float >= 25)) %}text-amber-400{% else %}text-emerald-400{% endif %}">{{ "%.1f"|format(patient['bmi']|float) if patient['bmi'] else '-' }}</span></div>
         </div>
         <!-- Progress Bar Alur Klinik -->
         {% set s_antrian = patient['status_antrian'] %}
@@ -3259,41 +3587,93 @@ def patient_history(patient_id):
     cur.execute('SELECT st.*, u.full_name doctor_name, u.username doctor_username FROM soap_records st LEFT JOIN users u ON st.doctor_id=u.id WHERE st.patient_id=? ORDER BY st.created_at DESC', (patient_id,)); soaps = cur.fetchall()
     cur.execute('SELECT * FROM uploads WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); files = cur.fetchall()
     cur.execute('SELECT * FROM billing WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)); bills = cur.fetchall()
+    # Keluarga
+    keluarga_members = []
+    if patient['keluarga_id']:
+        cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, hubungan FROM patients WHERE keluarga_id=? AND id!=? AND deleted=0 ORDER BY id", (patient['keluarga_id'], patient_id))
+        keluarga_members = cur.fetchall()
     
     milestone = get_milestone_info(soaps[0]['usia_kehamilan']) if soaps else None
 
     body = '''
     <div class="space-y-6">
-      <!-- Header Resume Pasien -->
+      <!-- Full Patient Data (Read Only) -->
       <div class="card p-6 bg-gradient-to-r from-slate-800/50 to-slate-900/50 border-white/10">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h3 class="text-3xl font-black text-white mb-1">Riwayat: {{ patient['nama_pasien'] }}</h3>
-            <p class="text-slate-400 font-medium">No RM: <span class="text-emerald-400 font-mono">{{ patient['nomor_rekam_medis'] }}</span> • Resume Kunjungan Periodik</p>
+            <h3 class="text-3xl font-black text-white mb-1">{{ patient['nama_pasien'] }}</h3>
+            <p class="text-slate-400 font-medium">No RM: <span class="text-emerald-400 font-mono">{{ patient['nomor_rekam_medis'] }}</span></p>
           </div>
-          <div class="toolbar no-print">
-            <a class="btn bg-slate-700 hover:bg-slate-600 text-white" href="{{ url_for('patient_detail', patient_id=patient['id']) }}">⬅️ Kembali ke Detail</a>
+          <div class="flex items-center gap-2">
+            <span class="pill {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span>
+            <a class="btn bg-slate-700 hover:bg-slate-600 text-white" href="{{ url_for('patient_detail', patient_id=patient['id']) }}">⬅️ Kembali</a>
           </div>
         </div>
-        
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Total Kunjungan</div>
+        <!-- Data Diri -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-white/5 text-sm">
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Umur / TTL</span><span class="text-white font-bold">{{ patient['umur'] or '-' }}<br><span class="text-slate-400 font-normal text-xs">{{ patient['tanggal_lahir'] or '-' }}</span></span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">NIK</span><span class="text-white font-bold">{{ patient['nik'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">No. HP</span><span class="text-white font-bold">{{ patient['nomor_hp'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Alamat</span><span class="text-slate-300">{{ patient['alamat'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Gol. Darah</span><span class="text-white font-bold">{{ patient['golongan_darah'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Status</span><span class="text-white font-bold">{{ patient['status_perkawinan'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Pekerjaan</span><span class="text-white font-bold">{{ patient['pekerjaan'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Nama Suami/Keluarga</span><span class="text-white font-bold">{{ patient['nama_keluarga'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Layanan</span><span class="text-white font-bold">{{ patient['jenis_layanan'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Dokter Tujuan</span><span class="text-sky-400 font-bold">{{ patient['dokter_tujuan'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Hubungan</span><span class="text-white font-bold">{{ patient['hubungan'] or '-' }}</span></div>
+          <div><span class="text-slate-500 block text-[10px] font-bold uppercase tracking-wider">Tanggal Daftar</span><span class="text-white font-bold">{{ fmt_dt(patient['created_at']) }}</span></div>
+        </div>
+        <!-- Antropometri -->
+        <div class="grid grid-cols-4 gap-4 mt-3 pt-3 border-t border-white/5 text-xs">
+          <div><span class="text-slate-500 block mb-1">TB (cm)</span><span class="text-white font-bold">{{ "%.1f"|format(patient['tinggi_badan']) if patient['tinggi_badan'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">BB (kg)</span><span class="text-white font-bold">{{ "%.1f"|format(patient['berat_badan']) if patient['berat_badan'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">Lingkar Perut</span><span class="text-white font-bold">{{ "%.1f"|format(patient['lingkar_perut']) if patient['lingkar_perut'] else '-' }}</span></div>
+          <div><span class="text-slate-500 block mb-1">BMI</span><span class="text-white font-bold {% if patient['bmi'] and (patient['bmi']<18.5 or patient['bmi']>=25) %}text-amber-400{% else %}text-emerald-400{% endif %}">{{ "%.1f"|format(patient['bmi']) if patient['bmi'] else '-' }}</span></div>
+        </div>
+        <!-- Keluarga -->
+        {% if keluarga_members %}
+        <div class="mt-3 pt-3 border-t border-white/5">
+          <div class="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-2">👨‍👩‍👧‍👦 Anggota Keluarga</div>
+          <div class="flex flex-wrap gap-2">
+            {% for km in keluarga_members %}
+            <a href="{{ url_for('patient_history', patient_id=km['id']) }}" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all text-xs">
+              <span class="text-slate-400">{{ km['hubungan'] or 'Anggota' }}:</span>
+              <span class="text-white font-bold">{{ km['nama_pasien'] }}</span>
+              <span class="text-slate-500 font-mono">({{ km['nomor_rekam_medis'] }})</span>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        <!-- Stats -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t border-white/5">
+          <div class="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+            <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Total Kunjungan</div>
             <div class="text-2xl font-black text-emerald-400">{{ soaps|length }}</div>
           </div>
-          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Dokumen Digital</div>
+          <div class="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+            <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Dokumen</div>
             <div class="text-2xl font-black text-sky-400">{{ files|length }}</div>
           </div>
-          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Transaksi</div>
+          <div class="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+            <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Transaksi</div>
             <div class="text-2xl font-black text-amber-400">{{ bills|length }}</div>
           </div>
-          <div class="p-4 rounded-2xl bg-white/5 border border-white/5">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Status</div>
-            <div class="text-lg font-bold"><span class="pill {{ patient['status_antrian'] }}">{{ patient['status_antrian'] }}</span></div>
+          <div class="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+            <div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Dibuat</div>
+            <div class="text-sm font-bold text-white">{{ fmt_dt(patient['created_at']).split(' ')[0] }}</div>
           </div>
         </div>
+      </div>
+
+      <!-- Trend Pertumbuhan Janin -->
+      <div class="card">
+        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+          <span class="w-1.5 h-6 bg-sky-500 rounded-full"></span> Tren Pertumbuhan Janin
+        </h3>
+        <div class="text-[10px] text-slate-500 mb-2 italic">Area arsiran menunjukkan rentang normal WHO (Persentil 10-90)</div>
+        <div class="h-[250px] w-full"><canvas id="historyGrowthChart"></canvas></div>
       </div>
 
       <!-- Monitoring Perkembangan -->
@@ -3471,7 +3851,39 @@ def patient_history(patient_id):
           </div>
         </div>
       </div>
-    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!document.getElementById('historyGrowthChart')) return;
+      fetch('/api/fetal_growth/{{ patient["id"] }}')
+        .then(r => r.json())
+        .then(data => {
+          const whoP10 = [250, 450, 750, 1100, 1600, 2100, 2600, 2900];
+          const whoP90 = [380, 700, 1100, 1650, 2300, 2900, 3500, 4100];
+          const ctx = document.getElementById('historyGrowthChart').getContext('2d');
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: [
+                { label: 'Rentang Normal (WHO P90)', data: whoP90, borderColor: 'rgba(34,197,94,0.2)', backgroundColor: 'rgba(34,197,94,0.05)', fill: '+1', pointRadius: 0, tension: 0.4 },
+                { label: 'Rentang Normal (WHO P10)', data: whoP10, borderColor: 'rgba(34,197,94,0.2)', backgroundColor: 'transparent', fill: false, pointRadius: 0, tension: 0.4 },
+                { label: 'Berat Janin (gr)', data: data.ebj, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', yAxisID: 'y', tension: 0.3 },
+                { label: 'DJJ (bpm)', data: data.djj, borderColor: '#0ea5e9', backgroundColor: 'transparent', yAxisID: 'y1', borderDash: [5, 5], tension: 0.3 }
+              ]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              scales: {
+                y: { type: 'linear', display: true, position: 'left', grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7b93b5' } },
+                y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#7b93b5' } },
+                x: { grid: { display: false }, ticks: { color: '#7b93b5' } }
+              },
+              plugins: { legend: { labels: { color: '#7b93b5', boxWidth: 10, font: { size: 9 }, filter: function(item) { return !item.text.includes('Rentang'); } } } }
+            }
+          });
+        });
+    });
+    </script>
     '''
     return render_page('Riwayat Pemeriksaan Pasien', body, patient=patient, soaps=soaps, files=files, bills=bills, fmt_dt=fmt_dt, rupiah=rupiah, file_badge=file_badge, milestone=milestone)
 
