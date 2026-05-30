@@ -128,11 +128,36 @@ def close_db(e=None):
 # [FIX] Pastikan DB ter-inisialisasi untuk semua environment (termasuk Gunicorn/Render)
 _db_initialized = False
 
+def auto_seed_if_empty():
+    """Jalankan seed otomatis jika tabel patients kosong (untuk Render deploy)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM patients")
+        count = cur.fetchone()[0]
+        conn.close()
+        if count == 0:
+            logger.info("[AUTO-SEED] Database kosong, menjalankan seed data...")
+            # Import dan jalankan seed
+            import importlib.util
+            seed_path = os.path.join(BASE_DIR, 'seed_klinik.py')
+            if os.path.exists(seed_path):
+                spec = importlib.util.spec_from_file_location("seed_klinik", seed_path)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                mod.seed()
+                logger.info("[AUTO-SEED] Seed data berhasil dimasukkan.")
+            else:
+                logger.warning(f"[AUTO-SEED] File {seed_path} tidak ditemukan.")
+    except Exception as e:
+        logger.error(f"[AUTO-SEED] Error: {e}")
+
 @app.before_request
 def ensure_db():
     global _db_initialized
     if not _db_initialized:
         init_db()
+        auto_seed_if_empty()
         _db_initialized = True
 
 def now():
