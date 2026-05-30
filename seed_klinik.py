@@ -4,8 +4,17 @@ import uuid
 import os
 from datetime import datetime, timedelta
 
-# Konfigurasi Path Database
-DB_PATH = 'usg4d_klinik.db'
+# Konfigurasi Path Database (sama dengan klinik.py agar compatible di Render)
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
+if os.environ.get('RENDER'):
+    render_disk = '/var/lib/data'
+    if os.path.exists(render_disk):
+        DATA_DIR = render_disk
+    else:
+        DATA_DIR = os.path.join(BASE_DIR, 'instance_data')
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, 'usg4d_klinik.db')
 
 # =============================================
 # DATA SAMPEL - SEMUA PEREMPUAN (Klinik USG 4D)
