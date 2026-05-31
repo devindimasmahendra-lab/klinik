@@ -101,7 +101,7 @@ def hitung_risiko_kehamilan(td_sistolik, td_diastolik, djj):
 
     if sys >= 160 or dia >= 110 or (d > 0 and (d < 100 or d > 170)):
         return {'status': 'Merah', 'label': 'Risiko Tinggi (Peringatan Dini)', 'color': '#ef4444', 'bg': 'rgba(239,68,68,0.15)'}
-    elif sys >= 140 or dia >= 90 or d < 110 or d > 160:
+    elif sys >= 140 or dia >= 90 or (0 < d < 110) or d > 160:
         return {'status': 'Kuning', 'label': 'Risiko Sedang (Pantau Lanjut)', 'color': '#f59e0b', 'bg': 'rgba(245,158,11,0.15)'}
     else:
         return {'status': 'Hijau', 'label': 'Risiko Rendah (Normal)', 'color': '#22c55e', 'bg': 'rgba(34,197,94,0.15)'}
@@ -112,6 +112,8 @@ def db():
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA cache_size=-4000")  # Gunakan 4MB cache untuk performa query besar
+    conn.execute("PRAGMA temp_store=MEMORY") # Simpan tabel temporer di RAM
     return conn
 
 def get_db():
@@ -185,12 +187,13 @@ def get_milestone_info(usia_kehamilan):
 
 def hitung_estimasi_tunggu(patient_id):
     conn = get_db()
+    td_local = date.today().isoformat()
     # Hitung rata-rata durasi pemeriksaan hari ini
     durasi_row = conn.execute("""
         SELECT AVG(unixepoch(updated_at) - unixepoch(created_at)) / 60 as avg_min 
         FROM soap_records 
-        WHERE date(created_at) = date('now')
-    """).fetchone()
+        WHERE date(created_at) = ?
+    """, (td_local,)).fetchone()
     avg_min = durasi_row[0] if (durasi_row and durasi_row[0]) else 15
     if avg_min < 5: avg_min = 15
     # Hitung jumlah orang di depan pasien ini dalam antrian
@@ -277,7 +280,7 @@ def init_db():
         PRAGMA foreign_keys=ON;
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
+            username TEXT UNIQUE NOT NULL, 
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('superadmin','admin','dokter','pasien')),
             full_name TEXT,
@@ -398,7 +401,12 @@ def init_db():
     ''')
     # Create indexes for performance
     cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_rm ON patients(nomor_rekam_medis)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_status ON patients(status_antrian)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_deleted ON patients(deleted)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_created ON patients(created_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_soap_patient ON soap_records(patient_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_soap_created ON soap_records(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_billing_patient ON billing(patient_id)")
 
     cur.execute('''
         CREATE TABLE IF NOT EXISTS master_options (
@@ -519,14 +527,14 @@ def get_patient(pid):
 
 
 @app.route('/api/patient_search')
-@role_required('superadmin', 'admin')
+@role_required('superadmin', 'admin', 'dokter')
 def api_patient_search():
     q = request.args.get('q', '').strip()
     if not q or len(q) < 2:
         return {'results': []}
     conn = get_db(); cur = conn.cursor()
     like = '%' + q + '%'
-    cur.execute("SELECT id,nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,created_at FROM patients WHERE nama_pasien LIKE ? OR nomor_rekam_medis LIKE ? OR nik LIKE ? OR nomor_hp LIKE ? ORDER BY nama_pasien LIMIT 20", (like, like, like, like))
+    cur.execute("SELECT id,nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,status_antrian,created_at FROM patients WHERE (nama_pasien LIKE ? OR nomor_rekam_medis LIKE ? OR nik LIKE ? OR nomor_hp LIKE ?) AND COALESCE(deleted, 0) = 0 ORDER BY nama_pasien LIMIT 20", (like, like, like, like))
     rows = [dict(r) for r in cur.fetchall()]
     return {'results': rows}
 
@@ -534,7 +542,7 @@ def api_patient_search():
 @role_required('superadmin', 'admin')
 def api_patient_by_id(patient_id):
     conn = get_db(); cur = conn.cursor()
-    cur.execute("SELECT id,nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,created_at FROM patients WHERE id=?", (patient_id,))
+    cur.execute("SELECT id,nama_pasien,nomor_rekam_medis,nik,tanggal_lahir,umur,alamat,nomor_hp,golongan_darah,status_perkawinan,pekerjaan,nama_keluarga,jenis_layanan,dokter_tujuan,status_antrian,created_at FROM patients WHERE id=?", (patient_id,))
     row = cur.fetchone()
     if not row:
         return {'result': None}
@@ -601,7 +609,7 @@ def api_keluarga_search():
         return {'results': []}
     conn = get_db(); cur = conn.cursor()
     like = '%' + q + '%'
-    cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, hubungan, keluarga_id FROM patients WHERE (nama_pasien LIKE ? OR nomor_rekam_medis LIKE ?) AND deleted=0 ORDER BY nama_pasien LIMIT 15", (like, like))
+    cur.execute("SELECT id, nama_pasien, nomor_rekam_medis, hubungan, keluarga_id FROM patients WHERE (nama_pasien LIKE ? OR nomor_rekam_medis LIKE ?) AND COALESCE(deleted, 0) = 0 ORDER BY nama_pasien LIMIT 15", (like, like))
     rows = [dict(r) for r in cur.fetchall()]
     return {'results': rows}
 
@@ -2915,7 +2923,7 @@ def patient_new():
       </div>
       <div style="margin-top:12px;margin-bottom:12px">
         <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;display:none;box-shadow:var(--shadow)"></div>
+        <div id="searchResults" style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;display:none;box-shadow:var(--shadow);position:relative;z-index:1000;"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;margin-bottom:16px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,0.1)"></div>
     </div>
@@ -2976,7 +2984,15 @@ def patient_new():
               {% for d in doctors %}<option value="{{ d['full_name'] or d['username'] }}" {{ 'selected' if edit_patient and edit_patient['dokter_tujuan']==(d['full_name'] or d['username']) else '' }}>{{ d['full_name'] or d['username'] }}</option>{% endfor %}
             </select>
           </div>
-          <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+          <div>
+            <label>Prioritas</label>
+            <select class="select" name="prioritas" id="fprioritas">
+              <option value="Non-urgent" {{ 'selected' if edit_patient and edit_patient['prioritas']=='Non-urgent' else '' }}>Non-urgent</option>
+              <option value="Urgent" {{ 'selected' if edit_patient and edit_patient['prioritas']=='Urgent' else '' }}>Urgent</option>
+            </select>
+          </div>
+          <input type="hidden" name="status_antrian" id="fstatusq" value="{{ edit_patient['status_antrian'] if edit_patient else 'menunggu' }}">
+          <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;grid-column:1/-1">
             <div class="small muted font-bold mb-2">👨‍👩‍👧‍👦 DATA KELUARGA</div>
             <div><label>Tautkan ke Ibu / Keluarga</label>
               <input class="input" id="keluargaSearch" placeholder="Cari nama ibu / anggota keluarga..." style="width:100%">
@@ -2995,14 +3011,6 @@ def patient_new():
                 <option value="Anak ke-5">Anak ke-5</option>
               </select>
             </div>
-          </div>
-          <div>
-            <label>Status Antrian</label>
-            <select class="select" name="status_antrian" id="fstatusq">
-              <option value="menunggu" {{ 'selected' if not edit_patient or edit_patient['status_antrian']=='menunggu' else '' }}>menunggu</option>
-              <option value="diperiksa" {{ 'selected' if edit_patient and edit_patient['status_antrian']=='diperiksa' else '' }}>diperiksa</option>
-              <option value="selesai" {{ 'selected' if edit_patient and edit_patient['status_antrian']=='selesai' else '' }}>selesai</option>
-            </select>
           </div>
           <div style="border-top:1px solid var(--border);grid-column:1/-1;padding-top:10px;margin-top:4px">
             <div class="small muted font-bold mb-2">📏 DATA ANTROPOMETRI</div>
@@ -3074,6 +3082,13 @@ def patient_new():
               if(!data.results||data.results.length===0){kr.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';kr.style.display='block';return;}
               var h='';
               data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+',\''+p.nama_pasien+'\\''+',\''+p.nomor_rekam_medis+'\\''+','+(p.keluarga_id||'null')+',\''+(p.hubungan||'')+'\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';});
+              data.results.forEach(function(p){
+                const escapedName = p.nama_pasien.replace(/'/g, "\\\\'");
+                const escapedRM = p.nomor_rekam_medis.replace(/'/g, "\\\\'");
+                const escapedHub = (p.hubungan || '').replace(/'/g, "\\\\'");
+                h+='<div onclick="pilihKeluarga('+p.id+', \\''+escapedName+'\\', \\''+escapedRM+'\\', '+(p.keluarga_id||'null')+', \\''+escapedHub+'\\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
+              data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+','+JSON.stringify(p.nama_pasien)+','+JSON.stringify(p.nomor_rekam_medis)+','+(p.keluarga_id||'null')+','+JSON.stringify(p.hubungan||'')+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
+              });
               kr.innerHTML=h;kr.style.display='block';
             });
           },300);
@@ -3101,7 +3116,8 @@ def patient_new():
         if(v.length<2){res.style.display='none';return;}
       sel.style.display='none'; // Sembunyikan kartu pasien terpilih segera saat mulai mencari
         timer=setTimeout(function(){
-        sel.style.display='none'; // Hide selected patient when a new search is initiated
+          res.innerHTML='<div style="padding:14px;color:var(--text-muted)"><span class="animate-pulse">⌛ Mencari...</span></div>';
+          res.style.display='block';
           fetch('/api/patient_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
             if(!data.results||data.results.length===0){
               res.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';res.style.display='block';return;
@@ -3184,10 +3200,23 @@ def patient_detail(patient_id):
         action = request.form.get('action', '')
         if action == 'update_status' and user['role'] in ('superadmin','admin','dokter'):
             st = request.form.get('status_antrian', '').strip()
-            if st in ('menunggu','diperiksa','selesai'):
+            current_st = patient['status_antrian']
+            valid = False
+            # Transisi yang diizinkan: hanya maju 1 langkah
+            if current_st == 'menunggu' and st == 'diperiksa':
+                valid = True
+            elif current_st == 'diperiksa' and st == 'selesai':
+                valid = True
+            if valid and st in ('menunggu','diperiksa','selesai'):
                 cur.execute('UPDATE patients SET status_antrian=?, updated_at=? WHERE id=?', (st, now(), patient_id)); conn.commit()
                 log_action('UPDATE_QUEUE_STATUS', 'Patient #{} -> {}'.format(patient_id, st)); flash('Status antrian diperbarui.', 'success'); return redirect(url_for('patient_detail', patient_id=patient_id))
+            else:
+                flash('Transisi status tidak valid: dari "{}" ke "{}" tidak diizinkan.'.format(current_st, st), 'danger')
         if action == 'add_to_queue' and user['role'] in ('superadmin', 'admin', 'dokter'):
+            current_st = patient['status_antrian']
+            if current_st in ('menunggu', 'diperiksa'):
+                flash('Pasien masih dalam antrian aktif ({}). Tidak bisa mengantrikan ulang.'.format(current_st), 'danger')
+                return redirect(url_for('patient_detail', patient_id=patient_id))
             # Update created_at agar pasien muncul di urutan terbawah antrian hari ini (FIFO)
             cur.execute("UPDATE patients SET status_antrian='menunggu', created_at=?, updated_at=? WHERE id=?", (now(), now(), patient_id))
             conn.commit()
@@ -3259,11 +3288,12 @@ def patient_detail(patient_id):
             </div>
           </div>
           <div class="flex gap-2 no-print">
+            {% if patient['status_antrian'] == 'selesai' %}
             <form method="post" onsubmit="return confirm('Antrikan pasien ini?')">
               <input type="hidden" name="action" value="add_to_queue">
               <button class="btn btn-sm btn-primary">➕ Antrikan</button>
             </form>
-            
+            {% endif %}
             <a class="btn btn-sm" href="{{ url_for('patient_new', edit=patient['id']) }}">✏️ Edit</a>
             {% if user['role'] == 'superadmin' %}
             <form method="post" action="{{ url_for('patient_delete', patient_id=patient['id']) }}" onsubmit="return confirm('Hapus pasien ini PERMANEN?')">
@@ -3324,6 +3354,7 @@ def patient_detail(patient_id):
           <div class="card">
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-lg font-bold flex items-center gap-2"><span class="w-1.5 h-6 bg-emerald-500 rounded-full"></span> Pemeriksaan Baru (SOAP)</h3>
+              {% if patient['status_antrian'] != 'selesai' %}
               <div class="no-print flex items-center gap-2">
                 <select class="select py-1 text-xs" id="soapTemplate" style="max-width:180px">
                   <option value="">Gunakan Template...</option>
@@ -3331,7 +3362,15 @@ def patient_detail(patient_id):
                 </select>
                 <button type="button" class="btn btn-sm" onclick="applySoap()">⚡</button>
               </div>
+              {% endif %}
             </div>
+            {% if patient['status_antrian'] == 'selesai' %}
+            <div class="p-6 text-center text-slate-500 italic">
+              <div class="text-3xl mb-2">✅</div>
+              <div>Pasien sudah selesai diperiksa. Tidak bisa menambah pemeriksaan baru.</div>
+              <div class="text-xs mt-2">Untuk pemeriksaan ulang, gunakan tombol "Antrikan" untuk mendaftarkan pasien kembali.</div>
+            </div>
+            {% else %}
             <form method="post" class="space-y-4 no-print">
               <input type="hidden" name="action" value="save_soap">
               <div class="grid md:grid-cols-2 gap-4">
@@ -3370,6 +3409,7 @@ def patient_detail(patient_id):
               </div>
             </form>
           </div>
+          {% endif %}
 
           <!-- Grafik Pertumbuhan Janin -->
           <div class="card">
@@ -3390,7 +3430,8 @@ def patient_detail(patient_id):
                   <tr><th>Tanggal</th><th>Usia Hamil</th><th>DJJ (bpm)</th><th>Posisi</th><th>Berat (gr)</th></tr>
                 </thead>
                 <tbody class="divide-y divide-white/5">
-                  {% for s in soaps|reverse %}
+                  {# Kita gunakan data dari SQL yang sudah di-sort ASC di backend untuk tabel tren #}
+                  {% for s in soaps[::-1] %}
                   <tr class="hover:bg-white/5"><td>{{ fmt_dt(s['created_at']).split(' ')[0] }}</td><td class="font-bold text-white">{{ s['usia_kehamilan'] or '-' }}</td><td>{{ s['detak_jantung_janin'] or '-' }}</td><td>{{ s['posisi_janin'] or '-' }}</td><td class="font-bold text-emerald-400">{{ s['estimasi_berat_janin'] or '-' }}</td></tr>
                   {% endfor %}
                 </tbody>
@@ -3428,15 +3469,25 @@ def patient_detail(patient_id):
         <div class="lg:col-span-4 space-y-4">
           <!-- Antrian & Upload -->
           <div class="card space-y-4 no-print">
-            <div>
-              <label>Update Status Antrian</label>
-              <form method="post" class="flex gap-2">
-                <input type="hidden" name="action" value="update_status">
-                <select class="select flex-1" name="status_antrian">
-                  {% for s in ['menunggu','diperiksa','selesai'] %}<option value="{{ s }}" {{ 'selected' if patient['status_antrian']==s else '' }}>{{ s }}</option>{% endfor %}
-                </select>
-                <button class="btn btn-primary">💾</button>
-              </form>
+          <div>
+              <div class="small muted font-bold mb-2">Status Antrian</div>
+              <div class="flex items-center gap-2">
+                <span class="pill {{ patient['status_antrian'] }} text-sm px-4 py-2">{{ patient['status_antrian'] }}</span>
+                {% if patient['status_antrian'] == 'menunggu' %}
+                <form method="post" style="display:inline">
+                  <input type="hidden" name="action" value="update_status">
+                  <input type="hidden" name="status_antrian" value="diperiksa">
+                  <button class="btn btn-sm btn-primary">🩺 Mulai Periksa</button>
+                </form>
+                {% endif %}
+                {% if patient['status_antrian'] == 'diperiksa' %}
+                <form method="post" style="display:inline" onsubmit="return confirm('Selesaikan pemeriksaan? Pastikan SOAP & billing sudah diisi.')">
+                  <input type="hidden" name="action" value="update_status">
+                  <input type="hidden" name="status_antrian" value="selesai">
+                  <button class="btn btn-sm btn-primary">✅ Selesaikan</button>
+                </form>
+                {% endif %}
+              </div>
             </div>
             <div class="pt-4 border-t border-white/5">
               <label>Upload Gambar/Video USG</label>
@@ -3698,7 +3749,7 @@ def patient_history(patient_id):
             </thead>
             <tbody class="divide-y divide-white/5">
               {% if soaps %}
-                {% for s in soaps %}
+                {% for s in soaps %} 
                 <tr class="hover:bg-white/5 transition-colors">
                   <td class="px-6 py-4 text-slate-400">{{ fmt_dt(s['created_at']).split(' ')[0] }}</td>
                   <td class="px-6 py-4 font-bold text-white">{{ s['usia_kehamilan'] or '-' }}</td>
