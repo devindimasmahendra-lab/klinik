@@ -2923,7 +2923,7 @@ def patient_new():
       </div>
       <div style="margin-top:12px;margin-bottom:12px">
         <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;display:none;box-shadow:var(--shadow);position:relative;z-index:1000;"></div>
+        <div id="searchResults" style="margin-top:4px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--primary);border-radius:12px;display:none;box-shadow:var(--shadow);position:absolute;width:100%;z-index:9999;backdrop-filter:blur(20px);"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;margin-bottom:16px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,0.1)"></div>
     </div>
@@ -3081,12 +3081,6 @@ def patient_new():
             fetch('/api/keluarga_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
               if(!data.results||data.results.length===0){kr.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';kr.style.display='block';return;}
               var h='';
-              data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+',\''+p.nama_pasien+'\\''+',\''+p.nomor_rekam_medis+'\\''+','+(p.keluarga_id||'null')+',\''+(p.hubungan||'')+'\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';});
-              data.results.forEach(function(p){
-                const escapedName = p.nama_pasien.replace(/'/g, "\\\\'");
-                const escapedRM = p.nomor_rekam_medis.replace(/'/g, "\\\\'");
-                const escapedHub = (p.hubungan || '').replace(/'/g, "\\\\'");
-                h+='<div onclick="pilihKeluarga('+p.id+', \\''+escapedName+'\\', \\''+escapedRM+'\\', '+(p.keluarga_id||'null')+', \\''+escapedHub+'\\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+','+JSON.stringify(p.nama_pasien)+','+JSON.stringify(p.nomor_rekam_medis)+','+(p.keluarga_id||'null')+','+JSON.stringify(p.hubungan||'')+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               });
               kr.innerHTML=h;kr.style.display='block';
