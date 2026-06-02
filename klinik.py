@@ -191,11 +191,9 @@ def hitung_estimasi_tunggu(patient_id):
     # Hitung rata-rata durasi pemeriksaan hari ini
     # [FIX] Gunakan julianday untuk kompatibilitas SQLite versi lama di Render
     durasi_row = conn.execute("""
-        SELECT AVG(unixepoch(updated_at) - unixepoch(created_at)) / 60 as avg_min 
         SELECT AVG(julianday(updated_at) - julianday(created_at)) * 1440 as avg_min 
         FROM soap_records 
         WHERE date(created_at) = ?
-    """, (td_local,)).fetchone()
     """, (td_local,)).fetchone() # 1440 = 24 * 60 menit
     avg_min = durasi_row[0] if (durasi_row and durasi_row[0]) else 15
     if avg_min < 5: avg_min = 15
@@ -4472,7 +4470,6 @@ except Exception as e:
 
 
 if __name__ == '__main__':
-    init_db()  # [FIX] Inisialisasi database sebelum server jalan
     port = get_port()
     print('=' * 66)
     print(APP_NAME + ' siap dijalankan')
