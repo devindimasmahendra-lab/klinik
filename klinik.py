@@ -189,14 +189,11 @@ def hitung_estimasi_tunggu(patient_id):
     conn = get_db()
     td_local = date.today().isoformat()
     # Hitung rata-rata durasi pemeriksaan hari ini
-    # [FIX] Gunakan julianday untuk kompatibilitas SQLite versi lama di Render
     durasi_row = conn.execute("""
         SELECT AVG(unixepoch(updated_at) - unixepoch(created_at)) / 60 as avg_min 
-        SELECT AVG(julianday(updated_at) - julianday(created_at)) * 1440 as avg_min 
         FROM soap_records 
         WHERE date(created_at) = ?
     """, (td_local,)).fetchone()
-    """, (td_local,)).fetchone() # 1440 = 24 * 60 menit
     avg_min = durasi_row[0] if (durasi_row and durasi_row[0]) else 15
     if avg_min < 5: avg_min = 15
     # Hitung jumlah orang di depan pasien ini dalam antrian
@@ -4455,20 +4452,6 @@ def e403(e):
 def e413(e):
     body = '''<div class="authbox loginbox"><div class="card center"><h2>File terlalu besar</h2><div class="muted">Ukuran maksimal upload adalah {{ max_mb }} MB.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ request.referrer or url_for('dashboard') }}">⬅️ Kembali</a></div></div></div>'''
     return render_page('Upload Terlalu Besar', body, max_mb=MAX_MB), 413
-
-
-# ======================================================
-# STARTUP INITIALIZATION (Thread-Safe for Render/Gunicorn)
-# ======================================================
-# Jalankan inisialisasi di tingkat modul agar master process Gunicorn 
-# menyelesaikannya sebelum melakukan forking ke workers.
-try:
-    ensure_dirs() # Pastikan folder upload ada
-    init_db()
-    auto_seed_if_empty()
-    logger.info("Database initialized successfully at startup.")
-except Exception as e:
-    logger.error(f"Critical error during startup: {e}")
 
 
 if __name__ == '__main__':
