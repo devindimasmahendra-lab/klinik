@@ -189,11 +189,12 @@ def hitung_estimasi_tunggu(patient_id):
     conn = get_db()
     td_local = date.today().isoformat()
     # Hitung rata-rata durasi pemeriksaan hari ini
+    # [FIX] Gunakan julianday untuk kompatibilitas SQLite versi lama di Render
     durasi_row = conn.execute("""
-        SELECT AVG(unixepoch(updated_at) - unixepoch(created_at)) / 60 as avg_min 
-        FROM soap_records 
+        SELECT AVG(julianday(updated_at) - julianday(created_at)) * 1440 as avg_min
+        FROM soap_records
         WHERE date(created_at) = ?
-    """, (td_local,)).fetchone()
+    """, (td_local,)).fetchone()  # 1440 = 24 * 60 menit
     avg_min = durasi_row[0] if (durasi_row and durasi_row[0]) else 15
     if avg_min < 5: avg_min = 15
     # Hitung jumlah orang di depan pasien ini dalam antrian
@@ -402,11 +403,11 @@ def init_db():
     # Create indexes for performance
     cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_rm ON patients(nomor_rekam_medis)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_status ON patients(status_antrian)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_deleted ON patients(deleted)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_created ON patients(created_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_soap_patient ON soap_records(patient_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_soap_created ON soap_records(created_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_billing_patient ON billing(patient_id)")
+    # idx_patients_deleted dibuat SETELAH migrasi kolom deleted di bawah
 
     cur.execute('''
         CREATE TABLE IF NOT EXISTS master_options (
@@ -464,6 +465,8 @@ def init_db():
             cur.execute('ALTER TABLE patients ADD COLUMN {} {}'.format(col, typ))
         except sqlite3.OperationalError:
             pass  # kolom sudah ada
+    # [FIX] idx_patients_deleted dibuat di sini, SETELAH kolom 'deleted' ada
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_patients_deleted ON patients(deleted)")
     # Migrasi kolom keluarga — relasi ibu & anak
     for col, typ in [('keluarga_id', 'INTEGER'), ('hubungan', 'TEXT')]:
         try:
@@ -2915,15 +2918,15 @@ def patient_new():
             except sqlite3.IntegrityError:
                 flash('Nomor rekam medis sudah digunakan.', 'danger')
     body = '''
-    <div class="card" style="margin-bottom:16px">
+    <div class="card" style="margin-bottom:16px;overflow:visible;position:relative;z-index:20">
       <h3 style="margin:0">Cari & Edit Pasien Lama</h3>
       <div class="small muted">Ketik nama / RM / NIK untuk mencari pasien yang sudah terdaftar.</div>
       <div style="margin-top:10px;padding:10px 14px;border-radius:14px;border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.08);font-size:.8rem;color:#fcd34d">
         ⚠️ Peringatan: Memilih pasien dari pencarian akan mengisi ulang semua field form di bawah. Jika Anda sedang mengisi data pasien baru, data yang sudah diketik akan <strong>ditimpa</strong>.
       </div>
-      <div style="margin-top:12px;margin-bottom:12px">
+      <div style="margin-top:12px;margin-bottom:12px;position:relative">
         <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;display:none;box-shadow:var(--shadow);position:relative;z-index:1000;"></div>
+        <div id="searchResults" style="left:0;right:0;margin-top:4px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--primary);border-radius:12px;display:none;box-shadow:var(--shadow);position:absolute;width:100%;z-index:99999;backdrop-filter:blur(20px);"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;margin-bottom:16px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,0.1)"></div>
     </div>
@@ -3035,6 +3038,7 @@ def patient_new():
     function setSelectVal(id, val) {
       var el = document.getElementById(id);
       if (!el) return;
+      if (!el.options) { el.value = val || ''; return; }
       // Remove previous temp options
       Array.from(el.options).forEach(function(o){ if(o.dataset.temp) el.removeChild(o); });
       el.value = val || '';
@@ -3081,12 +3085,6 @@ def patient_new():
             fetch('/api/keluarga_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
               if(!data.results||data.results.length===0){kr.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';kr.style.display='block';return;}
               var h='';
-              data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+',\''+p.nama_pasien+'\\''+',\''+p.nomor_rekam_medis+'\\''+','+(p.keluarga_id||'null')+',\''+(p.hubungan||'')+'\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';});
-              data.results.forEach(function(p){
-                const escapedName = p.nama_pasien.replace(/'/g, "\\\\'");
-                const escapedRM = p.nomor_rekam_medis.replace(/'/g, "\\\\'");
-                const escapedHub = (p.hubungan || '').replace(/'/g, "\\\\'");
-                h+='<div onclick="pilihKeluarga('+p.id+', \\''+escapedName+'\\', \\''+escapedRM+'\\', '+(p.keluarga_id||'null')+', \\''+escapedHub+'\\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+','+JSON.stringify(p.nama_pasien)+','+JSON.stringify(p.nomor_rekam_medis)+','+(p.keluarga_id||'null')+','+JSON.stringify(p.hubungan||'')+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               });
               kr.innerHTML=h;kr.style.display='block';
@@ -3099,12 +3097,20 @@ def patient_new():
         document.getElementById('fkeluarga_id').value=kid||id;
         if(!hub){
           sk.style.display='block';
-          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm" onclick="document.getElementById(\'fkeluarga_id\').value=\'\';document.getElementById(\'selectedKeluarga\').style.display=\'none\'">✕</button></div>';
+          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
         }else{
           sk.style.display='block';
-          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm" onclick="document.getElementById(\'fkeluarga_id\').value=\'\';document.getElementById(\'selectedKeluarga\').style.display=\'none\'">✕</button></div>';
+          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
         }
       };
+      if(sk){
+        sk.addEventListener('click',function(e){
+          if(e.target.classList.contains('clearKeluarga')){
+            document.getElementById('fkeluarga_id').value='';
+            sk.style.display='none';
+          }
+        });
+      }
       // === Existing patient search ===
       var inp=document.getElementById('searchExisting');
       var res=document.getElementById('searchResults');
@@ -4449,6 +4455,19 @@ def e403(e):
 def e413(e):
     body = '''<div class="authbox loginbox"><div class="card center"><h2>File terlalu besar</h2><div class="muted">Ukuran maksimal upload adalah {{ max_mb }} MB.</div><div class="toolbar" style="justify-content:center;margin-top:14px"><a class="btn btn-primary" href="{{ request.referrer or url_for('dashboard') }}">⬅️ Kembali</a></div></div></div>'''
     return render_page('Upload Terlalu Besar', body, max_mb=MAX_MB), 413
+
+
+# ======================================================
+# STARTUP INITIALIZATION (Thread-Safe for Render/Gunicorn)
+# ======================================================
+# Jalankan inisialisasi di tingkat modul agar master process Gunicorn 
+# menyelesaikannya sebelum melakukan forking ke workers.
+try:
+    init_db()
+    auto_seed_if_empty()
+    logger.info("Database initialized successfully at startup.")
+except Exception as e:
+    logger.error(f"Critical error during startup: {e}")
 
 
 if __name__ == '__main__':
