@@ -2915,15 +2915,15 @@ def patient_new():
             except sqlite3.IntegrityError:
                 flash('Nomor rekam medis sudah digunakan.', 'danger')
     body = '''
-    <div class="card" style="margin-bottom:16px;overflow:visible;position:relative;z-index:20">
+    <div class="card" style="margin-bottom:16px">
       <h3 style="margin:0">Cari & Edit Pasien Lama</h3>
       <div class="small muted">Ketik nama / RM / NIK untuk mencari pasien yang sudah terdaftar.</div>
       <div style="margin-top:10px;padding:10px 14px;border-radius:14px;border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.08);font-size:.8rem;color:#fcd34d">
         ⚠️ Peringatan: Memilih pasien dari pencarian akan mengisi ulang semua field form di bawah. Jika Anda sedang mengisi data pasien baru, data yang sudah diketik akan <strong>ditimpa</strong>.
       </div>
-      <div style="margin-top:12px;margin-bottom:12px;position:relative">
+      <div style="margin-top:12px;margin-bottom:12px">
         <input class="input" id="searchExisting" placeholder="Ketik nama / RM / NIK minimal 2 huruf..." style="width:100%">
-        <div id="searchResults" style="left:0;right:0;margin-top:4px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--primary);border-radius:12px;display:none;box-shadow:var(--shadow);position:absolute;width:100%;z-index:99999;backdrop-filter:blur(20px);"></div>
+        <div id="searchResults" style="margin-top:8px;max-height:300px;overflow-y:auto;background:var(--bg-light);border:1px solid var(--border);border-radius:16px;display:none;box-shadow:var(--shadow);position:relative;z-index:1000;"></div>
       </div>
       <div id="selectedPatient" style="display:none;margin-top:12px;margin-bottom:16px;padding:14px;border-radius:16px;border:1px solid var(--pri);background:rgba(34,197,94,0.1)"></div>
     </div>
@@ -3035,7 +3035,6 @@ def patient_new():
     function setSelectVal(id, val) {
       var el = document.getElementById(id);
       if (!el) return;
-      if (!el.options) { el.value = val || ''; return; }
       // Remove previous temp options
       Array.from(el.options).forEach(function(o){ if(o.dataset.temp) el.removeChild(o); });
       el.value = val || '';
@@ -3082,6 +3081,12 @@ def patient_new():
             fetch('/api/keluarga_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
               if(!data.results||data.results.length===0){kr.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';kr.style.display='block';return;}
               var h='';
+              data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+',\''+p.nama_pasien+'\\''+',\''+p.nomor_rekam_medis+'\\''+','+(p.keluarga_id||'null')+',\''+(p.hubungan||'')+'\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';});
+              data.results.forEach(function(p){
+                const escapedName = p.nama_pasien.replace(/'/g, "\\\\'");
+                const escapedRM = p.nomor_rekam_medis.replace(/'/g, "\\\\'");
+                const escapedHub = (p.hubungan || '').replace(/'/g, "\\\\'");
+                h+='<div onclick="pilihKeluarga('+p.id+', \\''+escapedName+'\\', \\''+escapedRM+'\\', '+(p.keluarga_id||'null')+', \\''+escapedHub+'\\')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+','+JSON.stringify(p.nama_pasien)+','+JSON.stringify(p.nomor_rekam_medis)+','+(p.keluarga_id||'null')+','+JSON.stringify(p.hubungan||'')+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               });
               kr.innerHTML=h;kr.style.display='block';
@@ -3094,20 +3099,12 @@ def patient_new():
         document.getElementById('fkeluarga_id').value=kid||id;
         if(!hub){
           sk.style.display='block';
-          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
+          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm" onclick="document.getElementById(\'fkeluarga_id\').value=\'\';document.getElementById(\'selectedKeluarga\').style.display=\'none\'">✕</button></div>';
         }else{
           sk.style.display='block';
-          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
+          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm" onclick="document.getElementById(\'fkeluarga_id\').value=\'\';document.getElementById(\'selectedKeluarga\').style.display=\'none\'">✕</button></div>';
         }
       };
-      if(sk){
-        sk.addEventListener('click',function(e){
-          if(e.target.classList.contains('clearKeluarga')){
-            document.getElementById('fkeluarga_id').value='';
-            sk.style.display='none';
-          }
-        });
-      }
       // === Existing patient search ===
       var inp=document.getElementById('searchExisting');
       var res=document.getElementById('searchResults');
