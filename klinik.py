@@ -3085,24 +3085,37 @@ def patient_new():
             fetch('/api/keluarga_search?q='+encodeURIComponent(v)).then(function(r){return r.json()}).then(function(data){
               if(!data.results||data.results.length===0){kr.innerHTML='<div style="padding:14px;color:var(--text-muted)">Tidak ditemukan</div>';kr.style.display='block';return;}
               var h='';
-              data.results.forEach(function(p){h+='<div onclick="pilihKeluarga('+p.id+','+JSON.stringify(p.nama_pasien)+','+JSON.stringify(p.nomor_rekam_medis)+','+(p.keluarga_id||'null')+','+JSON.stringify(p.hubungan||'')+')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
+              data.results.forEach(function(p){
+                var enc=function(s){return encodeURIComponent(s).replace(/'/g,'%27');};
+                h+='<div data-kid="'+(p.keluarga_id||'')+'" data-knama="'+enc(p.nama_pasien)+'" data-krm="'+enc(p.nomor_rekam_medis)+'" data-khub="'+enc(p.hubungan||'')+'" data-kid2="'+p.id+'" class="keluarga-item" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><div><strong>'+p.nama_pasien+'</strong><div class="small muted">RM: '+p.nomor_rekam_medis+' • Hub: '+(p.hubungan||'-')+'</div></div><span class="badge">pilih</span></div>';
               });
               kr.innerHTML=h;kr.style.display='block';
             });
           },300);
         });
       }
-      window.pilihKeluarga=function(id,name,rm,kid,hub){
-        kr.style.display='none';
-        document.getElementById('fkeluarga_id').value=kid||id;
-        if(!hub){
-          sk.style.display='block';
-          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
-        }else{
-          sk.style.display='block';
-          sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
-        }
-      };
+      // Keluarga: use data attributes to avoid HTML/JS escaping issues
+      if(kr){
+        kr.addEventListener('click',function(e){
+          var item=e.target.closest('.keluarga-item');
+          if(!item)return;
+          var dec=function(s){try{return decodeURIComponent(s.replace(/%27/g,"'"));}catch(ex){return s;}};
+          var id=parseInt(item.dataset.kid2);
+          var name=dec(item.dataset.knama);
+          var rm=dec(item.dataset.krm);
+          var kid=item.dataset.kid||id;
+          var hub=dec(item.dataset.khub);
+          kr.style.display='none';
+          document.getElementById('fkeluarga_id').value=kid;
+          if(!hub){
+            sk.style.display='block';
+            sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
+          }else{
+            sk.style.display='block';
+            sk.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div><strong>'+name+'</strong> <span class="small muted">(RM: '+rm+', '+hub+')</span></div><button type="button" class="btn btn-sm clearKeluarga">✕</button></div>';
+          }
+        });
+      }
       if(sk){
         sk.addEventListener('click',function(e){
           if(e.target.classList.contains('clearKeluarga')){
